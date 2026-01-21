@@ -1,0 +1,58 @@
+baseURL: ""
+languageCode: en-us
+title: MekeyPan
+theme: ["PaperMod"]
+
+# menu:
+#   main:
+#     - identifier: categories
+#       name: categories
+#       url: /categories/
+#       weight: 10
+#     - identifier: tags
+#       name: tags
+#       url: /tags/
+#       weight: 20
+#     - identifier: example
+#       name: example.org
+#       url: https://example.org
+#       weight: 30
+
+params:
+  defaultTheme: auto
+  # disableThemeToggle: true
+
+  profileMode:
+    enabled: true
+    title: "<Title>" # optional default will be site title
+    subtitle: "华为｜算力与AI｜大模型练习生"
+    imageUrl: "https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/00805c7fd02ca6bc410e08506a48899b.PNG" # optional
+    imageTitle: "This is MekeyPan" # optional
+    imageWidth: 225 # custom size
+    imageHeight: 225 # custom size
+    buttons:
+      - name: 动态
+        url: "posts"
+      - name: 分类
+        url: "/tags/"
+
+  socialIcons: # optional
+    - name: "github"
+      url: "https://github.com/pmy0721"
+    - name: "wechat"
+      url: "images/wechat.png"
+    - name: "weibo"
+      url: "https://weibo.com/u/6120414813"
+    - name: "xhs"
+      url: "https://xhslink.com/m/6HGBslPgJCw"
+
+  cover:
+    hidden: false # hide everywhere but not in structured data
+    # caption: "This is a caption" # optional
+    responsiveImages: true # optional
+
+  label:
+    # iconSVG: '<svg xmlns="http://www.w3.org/2000/svg" height="25" viewBox="0 -960 960 960" fill="currentColor"><path d="M320-240h320v-80H320v80Zm0-160h320v-80H320v80ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z"/></svg>'
+    text: "Home"
+    icon: icon.png
+    iconHeight: 35

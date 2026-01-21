@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>Jinx｜AIGC艺术集 | MekeyPan</title>
+<meta name="keywords" content="AIGC艺术集">
+<meta name="description" content="
+第一次尝试自己训练LoRA模型
+绘制参数如下：
+model：
+GhostMix-V2.0-fp16-BakedVAE    
+
+prompt：
+jinx,(masterpiece, best quality:1.3), (flat color:1.3),(colorful:1.3),looking at viewer,1girl,solo,floating colorful water,(2D:1.3), &lt;lora:zyd232_InkStyle_v1_0:0.6&gt; &lt;lora:jinx:1&gt;   
+
+Negative prompt: 
+(worst quality, low quality:2), monochrome, zombie,overexposure, watermark,text,bad anatomy,bad hand,extra hands,extra fingers,too many fingers,fused fingers,bad arm,distorted arm,extra arms,fused arms,extra legs,missing leg,disembodied leg,extra nipples, detached arm, liquid hand,inverted hand,disembodied limb, small breasts, loli, oversized head,extra body,completely nude, extra navel,easynegative,(hair between eyes),sketch, duplicate, ugly, huge eyes, text, logo, worst face, (bad and mutated hands:1.3), (blurry:2.0), horror, geometry, bad_prompt, (bad hands), (missing fingers), multiple limbs, bad anatomy, (interlocked fingers:1.2), Ugly Fingers, (extra digit and hands and fingers and legs and arms:1.4), ((2girl)), (deformed fingers:1.2), (long fingers:1.2),(bad-artist-anime), bad-artist, bad hand, extra legs ,(ng_deepnegative_v1_75t)   
+
+other parameters：
+Steps: 30, Sampler: DPM&#43;&#43; 2M Karras, CFG scale: 5, Size: 960x540, Model hash: e3edb8a26f, Model: GhostMix-V2.0-fp16-BakedVAE, Denoising strength: 0.5, Clip skip: 2, Hires upscale: 2, Hires steps: 20, Hires upscaler: R-ESRGAN 4x&#43; Anime6B, Lora hashes: &#34;zyd232_InkStyle_v1_0: 96718d4b1924, jinx: faecb6cfeccd&#34;, TI hashes: &#34;EasyNegative: c74b4e810b03, ng_deepnegative_v1_75t: 54e7e4826d53&#34;, Version: v1.5.1
+">
+<meta name="author" content="Me">
+<link rel="canonical" href="https://canonical.url/to/page">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.45e028aa8ce0961349adf411b013ee39406be2c0bc80d4ea3fc04555f7f4611a.css" integrity="sha256-ReAoqozglhNJrfQRsBPuOUBr4sC8gNTqP8BFVff0YRo=" rel="preload stylesheet" as="style">
+<link rel="icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="mask-icon" href="/safari-pinned-tab.svg">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="en" href="/posts/jinxaigc%E8%89%BA%E6%9C%AF%E9%9B%86/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+    <style>
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --theme: rgb(29, 30, 32);
+                --entry: rgb(46, 46, 51);
+                --primary: rgb(218, 218, 219);
+                --secondary: rgb(155, 156, 157);
+                --tertiary: rgb(65, 66, 68);
+                --content: rgb(196, 196, 197);
+                --code-block-bg: rgb(46, 46, 51);
+                --code-bg: rgb(55, 56, 62);
+                --border: rgb(51, 51, 51);
+            }
+
+            .list {
+                background: var(--theme);
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-track {
+                background: 0 0;
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-thumb {
+                border-color: var(--theme);
+            }
+        }
+
+    </style>
+</noscript><meta property="og:url" content="/posts/jinxaigc%E8%89%BA%E6%9C%AF%E9%9B%86/">
+  <meta property="og:site_name" content="MekeyPan">
+  <meta property="og:title" content="Jinx｜AIGC艺术集">
+  <meta property="og:description" content="
+第一次尝试自己训练LoRA模型
+绘制参数如下：
+model： GhostMix-V2.0-fp16-BakedVAE prompt： jinx,(masterpiece, best quality:1.3), (flat color:1.3),(colorful:1.3),looking at viewer,1girl,solo,floating colorful water,(2D:1.3), &lt;lora:zyd232_InkStyle_v1_0:0.6&gt; &lt;lora:jinx:1&gt; Negative prompt: (worst quality, low quality:2), monochrome, zombie,overexposure, watermark,text,bad anatomy,bad hand,extra hands,extra fingers,too many fingers,fused fingers,bad arm,distorted arm,extra arms,fused arms,extra legs,missing leg,disembodied leg,extra nipples, detached arm, liquid hand,inverted hand,disembodied limb, small breasts, loli, oversized head,extra body,completely nude, extra navel,easynegative,(hair between eyes),sketch, duplicate, ugly, huge eyes, text, logo, worst face, (bad and mutated hands:1.3), (blurry:2.0), horror, geometry, bad_prompt, (bad hands), (missing fingers), multiple limbs, bad anatomy, (interlocked fingers:1.2), Ugly Fingers, (extra digit and hands and fingers and legs and arms:1.4), ((2girl)), (deformed fingers:1.2), (long fingers:1.2),(bad-artist-anime), bad-artist, bad hand, extra legs ,(ng_deepnegative_v1_75t) other parameters： Steps: 30, Sampler: DPM&#43;&#43; 2M Karras, CFG scale: 5, Size: 960x540, Model hash: e3edb8a26f, Model: GhostMix-V2.0-fp16-BakedVAE, Denoising strength: 0.5, Clip skip: 2, Hires upscale: 2, Hires steps: 20, Hires upscaler: R-ESRGAN 4x&#43; Anime6B, Lora hashes: &#34;zyd232_InkStyle_v1_0: 96718d4b1924, jinx: faecb6cfeccd&#34;, TI hashes: &#34;EasyNegative: c74b4e810b03, ng_deepnegative_v1_75t: 54e7e4826d53&#34;, Version: v1.5.1 ">
+  <meta property="og:locale" content="en-us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="posts">
+    <meta property="article:published_time" content="2025-04-18T15:17:30+08:00">
+    <meta property="article:modified_time" content="2025-04-18T15:17:30+08:00">
+    <meta property="article:tag" content="AIGC艺术集">
+    <meta property="og:image" content="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/jinx01.PNG">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/jinx01.PNG">
+<meta name="twitter:title" content="Jinx｜AIGC艺术集">
+<meta name="twitter:description" content="
+第一次尝试自己训练LoRA模型
+绘制参数如下：
+model：
+GhostMix-V2.0-fp16-BakedVAE    
+
+prompt：
+jinx,(masterpiece, best quality:1.3), (flat color:1.3),(colorful:1.3),looking at viewer,1girl,solo,floating colorful water,(2D:1.3), &lt;lora:zyd232_InkStyle_v1_0:0.6&gt; &lt;lora:jinx:1&gt;   
+
+Negative prompt: 
+(worst quality, low quality:2), monochrome, zombie,overexposure, watermark,text,bad anatomy,bad hand,extra hands,extra fingers,too many fingers,fused fingers,bad arm,distorted arm,extra arms,fused arms,extra legs,missing leg,disembodied leg,extra nipples, detached arm, liquid hand,inverted hand,disembodied limb, small breasts, loli, oversized head,extra body,completely nude, extra navel,easynegative,(hair between eyes),sketch, duplicate, ugly, huge eyes, text, logo, worst face, (bad and mutated hands:1.3), (blurry:2.0), horror, geometry, bad_prompt, (bad hands), (missing fingers), multiple limbs, bad anatomy, (interlocked fingers:1.2), Ugly Fingers, (extra digit and hands and fingers and legs and arms:1.4), ((2girl)), (deformed fingers:1.2), (long fingers:1.2),(bad-artist-anime), bad-artist, bad hand, extra legs ,(ng_deepnegative_v1_75t)   
+
+other parameters：
+Steps: 30, Sampler: DPM&#43;&#43; 2M Karras, CFG scale: 5, Size: 960x540, Model hash: e3edb8a26f, Model: GhostMix-V2.0-fp16-BakedVAE, Denoising strength: 0.5, Clip skip: 2, Hires upscale: 2, Hires steps: 20, Hires upscaler: R-ESRGAN 4x&#43; Anime6B, Lora hashes: &#34;zyd232_InkStyle_v1_0: 96718d4b1924, jinx: faecb6cfeccd&#34;, TI hashes: &#34;EasyNegative: c74b4e810b03, ng_deepnegative_v1_75t: 54e7e4826d53&#34;, Version: v1.5.1
+">
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "/posts/"
+    }
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Jinx｜AIGC艺术集",
+      "item": "/posts/jinxaigc%E8%89%BA%E6%9C%AF%E9%9B%86/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Jinx｜AIGC艺术集",
+  "name": "Jinx｜AIGC艺术集",
+  "description": "\n第一次尝试自己训练LoRA模型\n绘制参数如下：\nmodel： GhostMix-V2.0-fp16-BakedVAE prompt： jinx,(masterpiece, best quality:1.3), (flat color:1.3),(colorful:1.3),looking at viewer,1girl,solo,floating colorful water,(2D:1.3), \u0026lt;lora:zyd232_InkStyle_v1_0:0.6\u0026gt; \u0026lt;lora:jinx:1\u0026gt; Negative prompt: (worst quality, low quality:2), monochrome, zombie,overexposure, watermark,text,bad anatomy,bad hand,extra hands,extra fingers,too many fingers,fused fingers,bad arm,distorted arm,extra arms,fused arms,extra legs,missing leg,disembodied leg,extra nipples, detached arm, liquid hand,inverted hand,disembodied limb, small breasts, loli, oversized head,extra body,completely nude, extra navel,easynegative,(hair between eyes),sketch, duplicate, ugly, huge eyes, text, logo, worst face, (bad and mutated hands:1.3), (blurry:2.0), horror, geometry, bad_prompt, (bad hands), (missing fingers), multiple limbs, bad anatomy, (interlocked fingers:1.2), Ugly Fingers, (extra digit and hands and fingers and legs and arms:1.4), ((2girl)), (deformed fingers:1.2), (long fingers:1.2),(bad-artist-anime), bad-artist, bad hand, extra legs ,(ng_deepnegative_v1_75t) other parameters： Steps: 30, Sampler: DPM++ 2M Karras, CFG scale: 5, Size: 960x540, Model hash: e3edb8a26f, Model: GhostMix-V2.0-fp16-BakedVAE, Denoising strength: 0.5, Clip skip: 2, Hires upscale: 2, Hires steps: 20, Hires upscaler: R-ESRGAN 4x+ Anime6B, Lora hashes: \u0026#34;zyd232_InkStyle_v1_0: 96718d4b1924, jinx: faecb6cfeccd\u0026#34;, TI hashes: \u0026#34;EasyNegative: c74b4e810b03, ng_deepnegative_v1_75t: 54e7e4826d53\u0026#34;, Version: v1.5.1 ",
+  "keywords": [
+    "AIGC艺术集"
+  ],
+  "articleBody": "\n第一次尝试自己训练LoRA模型\n绘制参数如下：\nmodel： GhostMix-V2.0-fp16-BakedVAE prompt： jinx,(masterpiece, best quality:1.3), (flat color:1.3),(colorful:1.3),looking at viewer,1girl,solo,floating colorful water,(2D:1.3), Negative prompt: (worst quality, low quality:2), monochrome, zombie,overexposure, watermark,text,bad anatomy,bad hand,extra hands,extra fingers,too many fingers,fused fingers,bad arm,distorted arm,extra arms,fused arms,extra legs,missing leg,disembodied leg,extra nipples, detached arm, liquid hand,inverted hand,disembodied limb, small breasts, loli, oversized head,extra body,completely nude, extra navel,easynegative,(hair between eyes),sketch, duplicate, ugly, huge eyes, text, logo, worst face, (bad and mutated hands:1.3), (blurry:2.0), horror, geometry, bad_prompt, (bad hands), (missing fingers), multiple limbs, bad anatomy, (interlocked fingers:1.2), Ugly Fingers, (extra digit and hands and fingers and legs and arms:1.4), ((2girl)), (deformed fingers:1.2), (long fingers:1.2),(bad-artist-anime), bad-artist, bad hand, extra legs ,(ng_deepnegative_v1_75t) other parameters： Steps: 30, Sampler: DPM++ 2M Karras, CFG scale: 5, Size: 960x540, Model hash: e3edb8a26f, Model: GhostMix-V2.0-fp16-BakedVAE, Denoising strength: 0.5, Clip skip: 2, Hires upscale: 2, Hires steps: 20, Hires upscaler: R-ESRGAN 4x+ Anime6B, Lora hashes: \"zyd232_InkStyle_v1_0: 96718d4b1924, jinx: faecb6cfeccd\", TI hashes: \"EasyNegative: c74b4e810b03, ng_deepnegative_v1_75t: 54e7e4826d53\", Version: v1.5.1 ",
+  "wordCount" : "155",
+  "inLanguage": "en",
+  "image":"https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/jinx01.PNG","datePublished": "2025-04-18T15:17:30+08:00",
+  "dateModified": "2025-04-18T15:17:30+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Me"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "/posts/jinxaigc%E8%89%BA%E6%9C%AF%E9%9B%86/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MekeyPan",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "/favicon.ico"
+    }
+  }
+}
+</script>
+</head>
+
+<body class="" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "dark") {
+        document.body.classList.add('dark');
+    } else if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('dark');
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="/" accesskey="h" title="Home (Alt + H)">
+                <img src="/icon.png" alt="" aria-label="logo"
+                    height="35">Home</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="/">Home</a>&nbsp;»&nbsp;<a href="/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      Jinx｜AIGC艺术集
+    </h1>
+    <div class="post-meta"><span title='2025-04-18 15:17:30 +0800 CST'>April 18, 2025</span>&nbsp;·&nbsp;1 min&nbsp;·&nbsp;155 words&nbsp;·&nbsp;Me
+
+</div>
+  </header> 
+<figure class="entry-cover"><img loading="eager" src="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/jinx01.PNG" alt="">
+        <p><!-- raw HTML omitted -->
+</p>
+</figure>
+
+  <div class="post-content"><p><img alt="002" loading="lazy" src="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/jinx02.PNG"></p>
+<p>第一次尝试自己训练LoRA模型</p>
+<p>绘制参数如下：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-txt" data-lang="txt"><span style="display:flex;"><span>model：
+</span></span><span style="display:flex;"><span>GhostMix-V2.0-fp16-BakedVAE    
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>prompt：
+</span></span><span style="display:flex;"><span>jinx,(masterpiece, best quality:1.3), (flat color:1.3),(colorful:1.3),looking at viewer,1girl,solo,floating colorful water,(2D:1.3), &lt;lora:zyd232_InkStyle_v1_0:0.6&gt; &lt;lora:jinx:1&gt;   
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Negative prompt: 
+</span></span><span style="display:flex;"><span>(worst quality, low quality:2), monochrome, zombie,overexposure, watermark,text,bad anatomy,bad hand,extra hands,extra fingers,too many fingers,fused fingers,bad arm,distorted arm,extra arms,fused arms,extra legs,missing leg,disembodied leg,extra nipples, detached arm, liquid hand,inverted hand,disembodied limb, small breasts, loli, oversized head,extra body,completely nude, extra navel,easynegative,(hair between eyes),sketch, duplicate, ugly, huge eyes, text, logo, worst face, (bad and mutated hands:1.3), (blurry:2.0), horror, geometry, bad_prompt, (bad hands), (missing fingers), multiple limbs, bad anatomy, (interlocked fingers:1.2), Ugly Fingers, (extra digit and hands and fingers and legs and arms:1.4), ((2girl)), (deformed fingers:1.2), (long fingers:1.2),(bad-artist-anime), bad-artist, bad hand, extra legs ,(ng_deepnegative_v1_75t)   
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>other parameters：
+</span></span><span style="display:flex;"><span>Steps: 30, Sampler: DPM++ 2M Karras, CFG scale: 5, Size: 960x540, Model hash: e3edb8a26f, Model: GhostMix-V2.0-fp16-BakedVAE, Denoising strength: 0.5, Clip skip: 2, Hires upscale: 2, Hires steps: 20, Hires upscaler: R-ESRGAN 4x+ Anime6B, Lora hashes: &#34;zyd232_InkStyle_v1_0: 96718d4b1924, jinx: faecb6cfeccd&#34;, TI hashes: &#34;EasyNegative: c74b4e810b03, ng_deepnegative_v1_75t: 54e7e4826d53&#34;, Version: v1.5.1
+</span></span></code></pre></div>
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+      <li><a href="/tags/aigc%E8%89%BA%E6%9C%AF%E9%9B%86/">AIGC艺术集</a></li>
+    </ul>
+<nav class="paginav">
+  <a class="prev" href="/posts/take-on-me%E9%9F%B3%E4%B9%90%E5%88%86%E4%BA%AB/">
+    <span class="title">« Prev</span>
+    <br>
+    <span>Take on Me-Various Artists｜音乐分享</span>
+  </a>
+  <a class="next" href="/posts/%E4%B8%AD%E5%9B%BD%E5%8A%A8%E6%BC%AB%E5%8D%9A%E7%89%A9%E9%A6%86%E6%91%84%E5%BD%B1/">
+    <span class="title">Next »</span>
+    <br>
+    <span>中国动漫博物馆｜摄影</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2026 <a href="/">MekeyPan</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+</body>
+
+</html>

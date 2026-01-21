@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>Pytorch实现基本的Transformer网络架构｜AI之路 | MekeyPan</title>
+<meta name="keywords" content="技术">
+<meta name="description" content="
+📚学习资源： 
+Road Map AI tutor 
+🔧代码优化工具：
+豆包
+
+Kaggle Notebook
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, d_model, num_heads):
+        &#34;&#34;&#34;
+        Initializes the MultiHeadAttention module.
+
+        Args:
+            d_model (int): The dimensionality of the input embeddings.
+            num_heads (int): The number of attention heads.
+        &#34;&#34;&#34;
+        super(MultiHeadAttention, self).__init__()
+        assert d_model % num_heads == 0, &#34;d_model must be divisible by num_heads&#34;
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads  # Dimensionality of each head&#39;s key, query, and value
+
+        # Linear projection layers for Q, K, V for all heads
+        self.W_Q = nn.Linear(d_model, d_model)
+        self.W_K = nn.Linear(d_model, d_model)
+        self.W_V = nn.Linear(d_model, d_model)
+
+        # Linear layer for the final output
+        self.W_O = nn.Linear(d_model, d_model)
+
+    def scaled_dot_product_attention(self, Q, K, V, mask=None):
+        &#34;&#34;&#34;
+        Computes scaled dot-product attention.
+
+        Args:
+            Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_k).
+            K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_k).
+            V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_v).
+            mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None.
+
+        Returns:
+            torch.Tensor: Output tensor after attention weighting.
+            torch.Tensor: Attention weights.
+        &#34;&#34;&#34;
+        # 注意力分数 -&gt; 注意力权重 -&gt; 注意力权重与V值向量矩阵加权求和得到结果，每个序列位置的输出是所有值向量的加权组合
+        
+        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)  # (batch_size, num_heads, seq_len, seq_len)
+        
+        if mask is not None:
+            attn_scores = attn_scores.masked_fill(mask == 0, -1e9)  # Mask out invalid positions  (batch_size, num_heads, seq_len, seq_len)
+
+        attn_weights = F.softmax(attn_scores, dim=-1)  # (batch_size, num_heads, seq_len, seq_len)
+        output = torch.matmul(attn_weights, V)  # (batch_size, seq_len, d_v)
+        return output, attn_weights
+
+    def split_heads(self, x):
+        &#34;&#34;&#34;
+        Splits the input tensor into multiple heads.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, d_model).
+
+        Returns:
+            torch.Tensor: Tensor of shape (batch_size, num_heads, seq_len, d_k).
+        &#34;&#34;&#34;
+        batch_size, seq_len, d_model = x.size()
+        return x.view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
+
+    def combine_heads(self, x):
+        &#34;&#34;&#34;
+        Combines the multiple heads back into a single tensor.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, num_heads, seq_len, d_k).
+
+        Returns:
+            torch.Tensor: Tensor of shape (batch_size, seq_len, d_model).
+        &#34;&#34;&#34;
+        batch_size, num_heads, seq_len, d_k = x.size()
+        return x.transpose(1, 2).contiguous().view(batch_size, seq_len, self.d_model)
+
+    def forward(self, Q, K, V, mask=None):
+        &#34;&#34;&#34;
+        Forward pass of the MultiHeadAttention module.
+
+        Args:
+            Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_model).
+            K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_model).
+            V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_model).
+            mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None.
+
+        Returns:
+            torch.Tensor: Output tensor after Multi-Head Attention.
+            torch.Tensor: Attention weights from all heads (averaged).
+        &#34;&#34;&#34;
+        batch_size = Q.size(0)
+
+        # 1. Linear projections and split into heads
+        Q = self.split_heads(self.W_Q(Q))  # (batch_size, num_heads, seq_len, d_k)
+        K = self.split_heads(self.W_K(K))  # (batch_size, num_heads, seq_len, d_k)
+        V = self.split_heads(self.W_V(V))  # (batch_size, num_heads, seq_len, d_v)
+
+        # 2. Apply scaled dot-product attention
+        output, attn_weights = self.scaled_dot_product_attention(Q, K, V, mask)  # (batch_size, num_heads, seq_len, d_v)
+
+        # 3. Combine heads
+        output = self.combine_heads(output)  # (batch_size, seq_len, d_model)
+
+        # 4. Linear output transformation
+        output = self.W_O(output)  # (batch_size, seq_len, d_model)
+
+        # Average attention weights across heads for analysis
+        attn_weights = torch.mean(attn_weights, dim=1) # (batch_size, seq_len, seq_len)
+
+        return output, attn_weights
+class PositionwiseFeedForward(nn.Module):
+    def __init__(self, d_model, d_ff):
+        super(PositionwiseFeedForward, self).__init__()
+        self.fc1 = nn.Linear(d_model, d_ff)
+        self.fc2 = nn.Linear(d_ff, d_model)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        return self.fc2(self.relu(self.fc1(x)))
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer(&#39;pe&#39;, pe)
+
+    def forward(self, x):
+        x = x &#43; self.pe[:x.size(0), :]
+        return self.dropout(x)
+class EncoderLayer(nn.Module):
+    def __init__(self, d_model, num_heads, d_ff, dropout=0.1):
+        super(EncoderLayer, self).__init__()
+        self.self_attn = MultiHeadAttention(d_model, num_heads) # Assuming MultiHeadAttention is defined
+        self.feed_forward = PositionwiseFeedForward(d_model, d_ff) # Assuming PositionwiseFeedForward is defined
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, mask):
+        # Multi-head attention sub-layer
+        attn_output, _ = self.self_attn(x, x, x, mask)
+        # Residual connection and layer normalization
+        x = self.norm1(x &#43; self.dropout(attn_output))
+        # Position-wise feed-forward network
+        ff_output = self.feed_forward(x)
+        # Residual connection and layer normalization
+        x = self.norm2(x &#43; self.dropout(ff_output))
+        return x
+
+class Encoder(nn.Module):
+    def __init__(self, num_layers, d_model, num_heads, d_ff, dropout=0.1):
+        super(Encoder, self).__init__()
+        self.layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout)
+                                     for _ in range(num_layers)])
+
+    def forward(self, x, mask):
+        for layer in self.layers:
+            x = layer(x, mask)
+        return x
+
+class DecoderLayer(nn.Module):
+    def __init__(self, d_model, num_heads, d_ff, dropout=0.1):
+        super(DecoderLayer, self).__init__()
+        self.masked_self_attn = MultiHeadAttention(d_model, num_heads) # Assuming MultiHeadAttention is defined
+        self.enc_dec_attn = MultiHeadAttention(d_model, num_heads)
+        self.feed_forward = PositionwiseFeedForward(d_model, d_ff) # Assuming PositionwiseFeedForward is defined
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, encoder_output, src_mask, tgt_mask):
+        # Masked multi-head attention sub-layer
+        attn_output, _ = self.masked_self_attn(x, x, x, tgt_mask)
+        # Residual connection and layer normalization
+        x = self.norm1(x &#43; self.dropout(attn_output))
+        # Encoder-decoder attention sub-layer
+        enc_dec_output, _ = self.enc_dec_attn(x, encoder_output, encoder_output, src_mask)
+        # Residual connection and layer normalization
+        x = self.norm2(x &#43; self.dropout(enc_dec_output))
+        # Position-wise feed-forward network
+        ff_output = self.feed_forward(x)
+        # Residual connection and layer normalization
+        x = self.norm3(x &#43; self.dropout(ff_output))
+        return x
+
+class Decoder(nn.Module):
+    def __init__(self, num_layers, d_model, num_heads, d_ff, dropout=0.1):
+        super(Decoder, self).__init__()
+        self.layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff, dropout)
+                                     for _ in range(num_layers)])
+
+    def forward(self, x, encoder_output, src_mask, tgt_mask):
+        for layer in self.layers:
+            x = layer(x, encoder_output, src_mask, tgt_mask)
+        return x
+class Transformer(nn.Module):
+    def __init__(self, src_vocab_size, tgt_vocab_size, num_layers, d_model, num_heads, d_ff, dropout=0.1):
+        super(Transformer, self).__init__()
+        self.embedding = nn.Embedding(src_vocab_size, d_model) # Source language embedding
+        self.pos_encoder = PositionalEncoding(d_model, dropout) # Assuming PositionalEncoding is defined
+        self.encoder = Encoder(num_layers, d_model, num_heads, d_ff, dropout)
+        self.decoder = Decoder(num_layers, d_model, num_heads, d_ff, dropout)
+        self.linear = nn.Linear(d_model, tgt_vocab_size) # Output linear layer
+        self.softmax = nn.LogSoftmax(dim=-1) # Apply softmax for probability distribution
+
+    def forward(self, src, tgt, src_mask, tgt_mask):
+        # Embed and add positional encoding to source and target sequences
+        src_embedded = self.pos_encoder(self.embedding(src))
+        tgt_embedded = self.pos_encoder(self.embedding(tgt))
+
+        # Encode the source sequence
+        encoder_output = self.encoder(src_embedded, src_mask)
+
+        # Decode the target sequence
+        decoder_output = self.decoder(tgt_embedded, encoder_output, src_mask, tgt_mask)
+
+        # Pass the decoder output through the linear layer and softmax
+        output = self.softmax(self.linear(decoder_output))
+        return output
+import torch.optim as optim
+import numpy as np
+
+# Define sequence length and vocabulary size
+sequence_length = 10
+vocab_size = 20  # Numbers from 0 to 19
+
+# Function to generate a random sequence
+def generate_sequence(length, vocab):
+    return torch.randint(0, vocab, (length,))
+
+# Function to reverse a sequence
+def reverse_sequence(sequence):
+    return torch.flip(sequence, dims=[0])
+
+# Generate training data
+num_samples = 1000
+train_data = []
+for _ in range(num_samples):
+    src_sequence = generate_sequence(sequence_length, vocab_size)
+    tgt_sequence = reverse_sequence(src_sequence)
+    train_data.append((src_sequence, tgt_sequence))
+
+# Example of a training sample
+src_sequence, tgt_sequence = train_data[0]
+print(&#34;Source Sequence:&#34;, src_sequence)
+print(&#34;Target Sequence:&#34;, tgt_sequence)
+from torch.utils.data import DataLoader, Dataset
+
+# Define a custom dataset class
+class SequenceDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+# Create the dataset
+train_dataset = SequenceDataset(train_data)
+
+# Define batch size
+batch_size = 32
+
+# Create the data loader
+train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+# Example of a batch
+for src_batch, tgt_batch in train_dataloader:
+    print(&#34;Source Batch Shape:&#34;, src_batch.shape)
+    print(&#34;Target Batch Shape:&#34;, tgt_batch.shape)
+    break
+# Model parameters
+embedding_dim = 64  # Dimension of the word embeddings
+num_heads = 2       # Number of attention heads
+num_layers = 2      # Number of encoder/decoder layers
+dropout = 0.1       # Dropout probability
+max_seq_length = sequence_length # Maximum sequence length for positional encoding
+
+# Instantiate the Transformer model
+model = Transformer(
+    src_vocab_size=vocab_size,
+    tgt_vocab_size=vocab_size,
+    num_layers=num_layers,
+    d_model=embedding_dim,
+    num_heads=num_heads,
+    d_ff=2048,  # 这里添加了 d_ff 参数，可根据需要调整
+    dropout=dropout
+)
+
+# Print the model architecture (optional)
+print(model)
+# Define the loss function (Cross-Entropy Loss)
+loss_function = nn.CrossEntropyLoss()
+
+# Define the optimizer (Adam)
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# Move the model to the appropriate device (CPU or GPU)
+device = torch.device(&#34;cuda&#34; if torch.cuda.is_available() else &#34;cpu&#34;)
+model = model.to(device)
+# Number of epochs
+num_epochs = 5000
+
+# Training loop
+for epoch in range(num_epochs):
+    model.train()  # Set the model to training mode
+    total_loss = 0
+
+    for src_batch, tgt_batch in train_dataloader:
+        # Move data to the device
+        src_batch = src_batch.to(device)
+        tgt_batch = tgt_batch.to(device)
+
+        # Generate masks
+        src_mask = (src_batch != 0).unsqueeze(1).unsqueeze(2)  # Assume 0 is the padding token
+        tgt_mask = (tgt_batch[:, :-1] != 0).unsqueeze(1).unsqueeze(2)
+
+        # Zero the gradients
+        optimizer.zero_grad()
+
+        # Forward pass
+        output = model(src_batch, tgt_batch[:, :-1], src_mask, tgt_mask)  # Shift right the target sequence
+
+        # Reshape the output and target to compute the loss
+        output = output.reshape(-1, vocab_size)
+        tgt = tgt_batch[:, 1:].reshape(-1) # Shift left the target sequence
+
+        # Calculate the loss
+        loss = loss_function(output, tgt)
+
+        # Backward pass and optimization
+        loss.backward()
+        optimizer.step()
+
+        total_loss &#43;= loss.item()
+
+    # Print the average loss for the epoch
+    print(f&#34;Epoch {epoch&#43;1}/{num_epochs}, Loss: {total_loss/len(train_dataloader)}&#34;)
+# Generate a test sequence
+test_sequence = generate_sequence(sequence_length, vocab_size).to(device)
+
+# Add a batch dimension
+test_sequence = test_sequence.unsqueeze(0)
+
+# Generate start token
+start_token = torch.tensor([[0]]).to(device) # Assuming 0 is the start token
+# Initialize the output sequence with the start token
+output_sequence = start_token
+
+# Generate masks
+src_mask = (test_sequence != 0).unsqueeze(1).unsqueeze(2)
+tgt_mask = (output_sequence != 0).unsqueeze(1).unsqueeze(2)
+
+# Autoregressive generation
+with torch.no_grad(): # Disable gradient calculation
+    for _ in range(sequence_length):
+        # Pass the input sequence and the current output sequence to the model
+        output = model(test_sequence, output_sequence, src_mask, tgt_mask)
+
+        # Get the last predicted token
+        predicted_token = torch.argmax(output[:, -1, :], dim=-1).unsqueeze(0)
+
+        # Append the predicted token to the output sequence
+        output_sequence = torch.cat((output_sequence, predicted_token), dim=1)
+
+# Remove the start token
+output_sequence = output_sequence[:, 1:]
+
+# Print the results
+print(&#34;Input Sequence:&#34;, test_sequence.squeeze())
+print(&#34;Predicted Sequence:&#34;, output_sequence.squeeze())
+print(&#34;Target Sequence:&#34;, reverse_sequence(test_sequence.squeeze()))
+">
+<meta name="author" content="Me">
+<link rel="canonical" href="https://canonical.url/to/page">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.45e028aa8ce0961349adf411b013ee39406be2c0bc80d4ea3fc04555f7f4611a.css" integrity="sha256-ReAoqozglhNJrfQRsBPuOUBr4sC8gNTqP8BFVff0YRo=" rel="preload stylesheet" as="style">
+<link rel="icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="mask-icon" href="/safari-pinned-tab.svg">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="en" href="/posts/new/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+    <style>
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --theme: rgb(29, 30, 32);
+                --entry: rgb(46, 46, 51);
+                --primary: rgb(218, 218, 219);
+                --secondary: rgb(155, 156, 157);
+                --tertiary: rgb(65, 66, 68);
+                --content: rgb(196, 196, 197);
+                --code-block-bg: rgb(46, 46, 51);
+                --code-bg: rgb(55, 56, 62);
+                --border: rgb(51, 51, 51);
+            }
+
+            .list {
+                background: var(--theme);
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-track {
+                background: 0 0;
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-thumb {
+                border-color: var(--theme);
+            }
+        }
+
+    </style>
+</noscript><meta property="og:url" content="/posts/new/">
+  <meta property="og:site_name" content="MekeyPan">
+  <meta property="og:title" content="Pytorch实现基本的Transformer网络架构｜AI之路">
+  <meta property="og:description" content=" 📚学习资源： Road Map AI tutor 🔧代码优化工具：
+豆包
+Kaggle Notebook
+import torch import torch.nn as nn import torch.nn.functional as F import math class MultiHeadAttention(nn.Module): def __init__(self, d_model, num_heads): &#34;&#34;&#34; Initializes the MultiHeadAttention module. Args: d_model (int): The dimensionality of the input embeddings. num_heads (int): The number of attention heads. &#34;&#34;&#34; super(MultiHeadAttention, self).__init__() assert d_model % num_heads == 0, &#34;d_model must be divisible by num_heads&#34; self.d_model = d_model self.num_heads = num_heads self.d_k = d_model // num_heads # Dimensionality of each head&#39;s key, query, and value # Linear projection layers for Q, K, V for all heads self.W_Q = nn.Linear(d_model, d_model) self.W_K = nn.Linear(d_model, d_model) self.W_V = nn.Linear(d_model, d_model) # Linear layer for the final output self.W_O = nn.Linear(d_model, d_model) def scaled_dot_product_attention(self, Q, K, V, mask=None): &#34;&#34;&#34; Computes scaled dot-product attention. Args: Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_k). K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_k). V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_v). mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None. Returns: torch.Tensor: Output tensor after attention weighting. torch.Tensor: Attention weights. &#34;&#34;&#34; # 注意力分数 -&gt; 注意力权重 -&gt; 注意力权重与V值向量矩阵加权求和得到结果，每个序列位置的输出是所有值向量的加权组合 attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k) # (batch_size, num_heads, seq_len, seq_len) if mask is not None: attn_scores = attn_scores.masked_fill(mask == 0, -1e9) # Mask out invalid positions (batch_size, num_heads, seq_len, seq_len) attn_weights = F.softmax(attn_scores, dim=-1) # (batch_size, num_heads, seq_len, seq_len) output = torch.matmul(attn_weights, V) # (batch_size, seq_len, d_v) return output, attn_weights def split_heads(self, x): &#34;&#34;&#34; Splits the input tensor into multiple heads. Args: x (torch.Tensor): Input tensor of shape (batch_size, seq_len, d_model). Returns: torch.Tensor: Tensor of shape (batch_size, num_heads, seq_len, d_k). &#34;&#34;&#34; batch_size, seq_len, d_model = x.size() return x.view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2) def combine_heads(self, x): &#34;&#34;&#34; Combines the multiple heads back into a single tensor. Args: x (torch.Tensor): Input tensor of shape (batch_size, num_heads, seq_len, d_k). Returns: torch.Tensor: Tensor of shape (batch_size, seq_len, d_model). &#34;&#34;&#34; batch_size, num_heads, seq_len, d_k = x.size() return x.transpose(1, 2).contiguous().view(batch_size, seq_len, self.d_model) def forward(self, Q, K, V, mask=None): &#34;&#34;&#34; Forward pass of the MultiHeadAttention module. Args: Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_model). K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_model). V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_model). mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None. Returns: torch.Tensor: Output tensor after Multi-Head Attention. torch.Tensor: Attention weights from all heads (averaged). &#34;&#34;&#34; batch_size = Q.size(0) # 1. Linear projections and split into heads Q = self.split_heads(self.W_Q(Q)) # (batch_size, num_heads, seq_len, d_k) K = self.split_heads(self.W_K(K)) # (batch_size, num_heads, seq_len, d_k) V = self.split_heads(self.W_V(V)) # (batch_size, num_heads, seq_len, d_v) # 2. Apply scaled dot-product attention output, attn_weights = self.scaled_dot_product_attention(Q, K, V, mask) # (batch_size, num_heads, seq_len, d_v) # 3. Combine heads output = self.combine_heads(output) # (batch_size, seq_len, d_model) # 4. Linear output transformation output = self.W_O(output) # (batch_size, seq_len, d_model) # Average attention weights across heads for analysis attn_weights = torch.mean(attn_weights, dim=1) # (batch_size, seq_len, seq_len) return output, attn_weights class PositionwiseFeedForward(nn.Module): def __init__(self, d_model, d_ff): super(PositionwiseFeedForward, self).__init__() self.fc1 = nn.Linear(d_model, d_ff) self.fc2 = nn.Linear(d_ff, d_model) self.relu = nn.ReLU() def forward(self, x): return self.fc2(self.relu(self.fc1(x))) class PositionalEncoding(nn.Module): def __init__(self, d_model, dropout=0.1, max_len=5000): super(PositionalEncoding, self).__init__() self.dropout = nn.Dropout(p=dropout) pe = torch.zeros(max_len, d_model) position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1) div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)) pe[:, 0::2] = torch.sin(position * div_term) pe[:, 1::2] = torch.cos(position * div_term) pe = pe.unsqueeze(0).transpose(0, 1) self.register_buffer(&#39;pe&#39;, pe) def forward(self, x): x = x &#43; self.pe[:x.size(0), :] return self.dropout(x) class EncoderLayer(nn.Module): def __init__(self, d_model, num_heads, d_ff, dropout=0.1): super(EncoderLayer, self).__init__() self.self_attn = MultiHeadAttention(d_model, num_heads) # Assuming MultiHeadAttention is defined self.feed_forward = PositionwiseFeedForward(d_model, d_ff) # Assuming PositionwiseFeedForward is defined self.norm1 = nn.LayerNorm(d_model) self.norm2 = nn.LayerNorm(d_model) self.dropout = nn.Dropout(dropout) def forward(self, x, mask): # Multi-head attention sub-layer attn_output, _ = self.self_attn(x, x, x, mask) # Residual connection and layer normalization x = self.norm1(x &#43; self.dropout(attn_output)) # Position-wise feed-forward network ff_output = self.feed_forward(x) # Residual connection and layer normalization x = self.norm2(x &#43; self.dropout(ff_output)) return x class Encoder(nn.Module): def __init__(self, num_layers, d_model, num_heads, d_ff, dropout=0.1): super(Encoder, self).__init__() self.layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)]) def forward(self, x, mask): for layer in self.layers: x = layer(x, mask) return x class DecoderLayer(nn.Module): def __init__(self, d_model, num_heads, d_ff, dropout=0.1): super(DecoderLayer, self).__init__() self.masked_self_attn = MultiHeadAttention(d_model, num_heads) # Assuming MultiHeadAttention is defined self.enc_dec_attn = MultiHeadAttention(d_model, num_heads) self.feed_forward = PositionwiseFeedForward(d_model, d_ff) # Assuming PositionwiseFeedForward is defined self.norm1 = nn.LayerNorm(d_model) self.norm2 = nn.LayerNorm(d_model) self.norm3 = nn.LayerNorm(d_model) self.dropout = nn.Dropout(dropout) def forward(self, x, encoder_output, src_mask, tgt_mask): # Masked multi-head attention sub-layer attn_output, _ = self.masked_self_attn(x, x, x, tgt_mask) # Residual connection and layer normalization x = self.norm1(x &#43; self.dropout(attn_output)) # Encoder-decoder attention sub-layer enc_dec_output, _ = self.enc_dec_attn(x, encoder_output, encoder_output, src_mask) # Residual connection and layer normalization x = self.norm2(x &#43; self.dropout(enc_dec_output)) # Position-wise feed-forward network ff_output = self.feed_forward(x) # Residual connection and layer normalization x = self.norm3(x &#43; self.dropout(ff_output)) return x class Decoder(nn.Module): def __init__(self, num_layers, d_model, num_heads, d_ff, dropout=0.1): super(Decoder, self).__init__() self.layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)]) def forward(self, x, encoder_output, src_mask, tgt_mask): for layer in self.layers: x = layer(x, encoder_output, src_mask, tgt_mask) return x class Transformer(nn.Module): def __init__(self, src_vocab_size, tgt_vocab_size, num_layers, d_model, num_heads, d_ff, dropout=0.1): super(Transformer, self).__init__() self.embedding = nn.Embedding(src_vocab_size, d_model) # Source language embedding self.pos_encoder = PositionalEncoding(d_model, dropout) # Assuming PositionalEncoding is defined self.encoder = Encoder(num_layers, d_model, num_heads, d_ff, dropout) self.decoder = Decoder(num_layers, d_model, num_heads, d_ff, dropout) self.linear = nn.Linear(d_model, tgt_vocab_size) # Output linear layer self.softmax = nn.LogSoftmax(dim=-1) # Apply softmax for probability distribution def forward(self, src, tgt, src_mask, tgt_mask): # Embed and add positional encoding to source and target sequences src_embedded = self.pos_encoder(self.embedding(src)) tgt_embedded = self.pos_encoder(self.embedding(tgt)) # Encode the source sequence encoder_output = self.encoder(src_embedded, src_mask) # Decode the target sequence decoder_output = self.decoder(tgt_embedded, encoder_output, src_mask, tgt_mask) # Pass the decoder output through the linear layer and softmax output = self.softmax(self.linear(decoder_output)) return output import torch.optim as optim import numpy as np # Define sequence length and vocabulary size sequence_length = 10 vocab_size = 20 # Numbers from 0 to 19 # Function to generate a random sequence def generate_sequence(length, vocab): return torch.randint(0, vocab, (length,)) # Function to reverse a sequence def reverse_sequence(sequence): return torch.flip(sequence, dims=[0]) # Generate training data num_samples = 1000 train_data = [] for _ in range(num_samples): src_sequence = generate_sequence(sequence_length, vocab_size) tgt_sequence = reverse_sequence(src_sequence) train_data.append((src_sequence, tgt_sequence)) # Example of a training sample src_sequence, tgt_sequence = train_data[0] print(&#34;Source Sequence:&#34;, src_sequence) print(&#34;Target Sequence:&#34;, tgt_sequence) from torch.utils.data import DataLoader, Dataset # Define a custom dataset class class SequenceDataset(Dataset): def __init__(self, data): self.data = data def __len__(self): return len(self.data) def __getitem__(self, idx): return self.data[idx] # Create the dataset train_dataset = SequenceDataset(train_data) # Define batch size batch_size = 32 # Create the data loader train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True) # Example of a batch for src_batch, tgt_batch in train_dataloader: print(&#34;Source Batch Shape:&#34;, src_batch.shape) print(&#34;Target Batch Shape:&#34;, tgt_batch.shape) break # Model parameters embedding_dim = 64 # Dimension of the word embeddings num_heads = 2 # Number of attention heads num_layers = 2 # Number of encoder/decoder layers dropout = 0.1 # Dropout probability max_seq_length = sequence_length # Maximum sequence length for positional encoding # Instantiate the Transformer model model = Transformer( src_vocab_size=vocab_size, tgt_vocab_size=vocab_size, num_layers=num_layers, d_model=embedding_dim, num_heads=num_heads, d_ff=2048, # 这里添加了 d_ff 参数，可根据需要调整 dropout=dropout ) # Print the model architecture (optional) print(model) # Define the loss function (Cross-Entropy Loss) loss_function = nn.CrossEntropyLoss() # Define the optimizer (Adam) optimizer = optim.Adam(model.parameters(), lr=0.001) # Move the model to the appropriate device (CPU or GPU) device = torch.device(&#34;cuda&#34; if torch.cuda.is_available() else &#34;cpu&#34;) model = model.to(device) # Number of epochs num_epochs = 5000 # Training loop for epoch in range(num_epochs): model.train() # Set the model to training mode total_loss = 0 for src_batch, tgt_batch in train_dataloader: # Move data to the device src_batch = src_batch.to(device) tgt_batch = tgt_batch.to(device) # Generate masks src_mask = (src_batch != 0).unsqueeze(1).unsqueeze(2) # Assume 0 is the padding token tgt_mask = (tgt_batch[:, :-1] != 0).unsqueeze(1).unsqueeze(2) # Zero the gradients optimizer.zero_grad() # Forward pass output = model(src_batch, tgt_batch[:, :-1], src_mask, tgt_mask) # Shift right the target sequence # Reshape the output and target to compute the loss output = output.reshape(-1, vocab_size) tgt = tgt_batch[:, 1:].reshape(-1) # Shift left the target sequence # Calculate the loss loss = loss_function(output, tgt) # Backward pass and optimization loss.backward() optimizer.step() total_loss &#43;= loss.item() # Print the average loss for the epoch print(f&#34;Epoch {epoch&#43;1}/{num_epochs}, Loss: {total_loss/len(train_dataloader)}&#34;) # Generate a test sequence test_sequence = generate_sequence(sequence_length, vocab_size).to(device) # Add a batch dimension test_sequence = test_sequence.unsqueeze(0) # Generate start token start_token = torch.tensor([[0]]).to(device) # Assuming 0 is the start token # Initialize the output sequence with the start token output_sequence = start_token # Generate masks src_mask = (test_sequence != 0).unsqueeze(1).unsqueeze(2) tgt_mask = (output_sequence != 0).unsqueeze(1).unsqueeze(2) # Autoregressive generation with torch.no_grad(): # Disable gradient calculation for _ in range(sequence_length): # Pass the input sequence and the current output sequence to the model output = model(test_sequence, output_sequence, src_mask, tgt_mask) # Get the last predicted token predicted_token = torch.argmax(output[:, -1, :], dim=-1).unsqueeze(0) # Append the predicted token to the output sequence output_sequence = torch.cat((output_sequence, predicted_token), dim=1) # Remove the start token output_sequence = output_sequence[:, 1:] # Print the results print(&#34;Input Sequence:&#34;, test_sequence.squeeze()) print(&#34;Predicted Sequence:&#34;, output_sequence.squeeze()) print(&#34;Target Sequence:&#34;, reverse_sequence(test_sequence.squeeze())) ">
+  <meta property="og:locale" content="en-us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="posts">
+    <meta property="article:tag" content="技术">
+    <meta property="og:image" content="/%3Cimage%20path/url%3E">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="/%3Cimage%20path/url%3E">
+<meta name="twitter:title" content="Pytorch实现基本的Transformer网络架构｜AI之路">
+<meta name="twitter:description" content="
+📚学习资源： 
+Road Map AI tutor 
+🔧代码优化工具：
+豆包
+
+Kaggle Notebook
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, d_model, num_heads):
+        &#34;&#34;&#34;
+        Initializes the MultiHeadAttention module.
+
+        Args:
+            d_model (int): The dimensionality of the input embeddings.
+            num_heads (int): The number of attention heads.
+        &#34;&#34;&#34;
+        super(MultiHeadAttention, self).__init__()
+        assert d_model % num_heads == 0, &#34;d_model must be divisible by num_heads&#34;
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads  # Dimensionality of each head&#39;s key, query, and value
+
+        # Linear projection layers for Q, K, V for all heads
+        self.W_Q = nn.Linear(d_model, d_model)
+        self.W_K = nn.Linear(d_model, d_model)
+        self.W_V = nn.Linear(d_model, d_model)
+
+        # Linear layer for the final output
+        self.W_O = nn.Linear(d_model, d_model)
+
+    def scaled_dot_product_attention(self, Q, K, V, mask=None):
+        &#34;&#34;&#34;
+        Computes scaled dot-product attention.
+
+        Args:
+            Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_k).
+            K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_k).
+            V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_v).
+            mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None.
+
+        Returns:
+            torch.Tensor: Output tensor after attention weighting.
+            torch.Tensor: Attention weights.
+        &#34;&#34;&#34;
+        # 注意力分数 -&gt; 注意力权重 -&gt; 注意力权重与V值向量矩阵加权求和得到结果，每个序列位置的输出是所有值向量的加权组合
+        
+        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)  # (batch_size, num_heads, seq_len, seq_len)
+        
+        if mask is not None:
+            attn_scores = attn_scores.masked_fill(mask == 0, -1e9)  # Mask out invalid positions  (batch_size, num_heads, seq_len, seq_len)
+
+        attn_weights = F.softmax(attn_scores, dim=-1)  # (batch_size, num_heads, seq_len, seq_len)
+        output = torch.matmul(attn_weights, V)  # (batch_size, seq_len, d_v)
+        return output, attn_weights
+
+    def split_heads(self, x):
+        &#34;&#34;&#34;
+        Splits the input tensor into multiple heads.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, d_model).
+
+        Returns:
+            torch.Tensor: Tensor of shape (batch_size, num_heads, seq_len, d_k).
+        &#34;&#34;&#34;
+        batch_size, seq_len, d_model = x.size()
+        return x.view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
+
+    def combine_heads(self, x):
+        &#34;&#34;&#34;
+        Combines the multiple heads back into a single tensor.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, num_heads, seq_len, d_k).
+
+        Returns:
+            torch.Tensor: Tensor of shape (batch_size, seq_len, d_model).
+        &#34;&#34;&#34;
+        batch_size, num_heads, seq_len, d_k = x.size()
+        return x.transpose(1, 2).contiguous().view(batch_size, seq_len, self.d_model)
+
+    def forward(self, Q, K, V, mask=None):
+        &#34;&#34;&#34;
+        Forward pass of the MultiHeadAttention module.
+
+        Args:
+            Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_model).
+            K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_model).
+            V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_model).
+            mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None.
+
+        Returns:
+            torch.Tensor: Output tensor after Multi-Head Attention.
+            torch.Tensor: Attention weights from all heads (averaged).
+        &#34;&#34;&#34;
+        batch_size = Q.size(0)
+
+        # 1. Linear projections and split into heads
+        Q = self.split_heads(self.W_Q(Q))  # (batch_size, num_heads, seq_len, d_k)
+        K = self.split_heads(self.W_K(K))  # (batch_size, num_heads, seq_len, d_k)
+        V = self.split_heads(self.W_V(V))  # (batch_size, num_heads, seq_len, d_v)
+
+        # 2. Apply scaled dot-product attention
+        output, attn_weights = self.scaled_dot_product_attention(Q, K, V, mask)  # (batch_size, num_heads, seq_len, d_v)
+
+        # 3. Combine heads
+        output = self.combine_heads(output)  # (batch_size, seq_len, d_model)
+
+        # 4. Linear output transformation
+        output = self.W_O(output)  # (batch_size, seq_len, d_model)
+
+        # Average attention weights across heads for analysis
+        attn_weights = torch.mean(attn_weights, dim=1) # (batch_size, seq_len, seq_len)
+
+        return output, attn_weights
+class PositionwiseFeedForward(nn.Module):
+    def __init__(self, d_model, d_ff):
+        super(PositionwiseFeedForward, self).__init__()
+        self.fc1 = nn.Linear(d_model, d_ff)
+        self.fc2 = nn.Linear(d_ff, d_model)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        return self.fc2(self.relu(self.fc1(x)))
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer(&#39;pe&#39;, pe)
+
+    def forward(self, x):
+        x = x &#43; self.pe[:x.size(0), :]
+        return self.dropout(x)
+class EncoderLayer(nn.Module):
+    def __init__(self, d_model, num_heads, d_ff, dropout=0.1):
+        super(EncoderLayer, self).__init__()
+        self.self_attn = MultiHeadAttention(d_model, num_heads) # Assuming MultiHeadAttention is defined
+        self.feed_forward = PositionwiseFeedForward(d_model, d_ff) # Assuming PositionwiseFeedForward is defined
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, mask):
+        # Multi-head attention sub-layer
+        attn_output, _ = self.self_attn(x, x, x, mask)
+        # Residual connection and layer normalization
+        x = self.norm1(x &#43; self.dropout(attn_output))
+        # Position-wise feed-forward network
+        ff_output = self.feed_forward(x)
+        # Residual connection and layer normalization
+        x = self.norm2(x &#43; self.dropout(ff_output))
+        return x
+
+class Encoder(nn.Module):
+    def __init__(self, num_layers, d_model, num_heads, d_ff, dropout=0.1):
+        super(Encoder, self).__init__()
+        self.layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout)
+                                     for _ in range(num_layers)])
+
+    def forward(self, x, mask):
+        for layer in self.layers:
+            x = layer(x, mask)
+        return x
+
+class DecoderLayer(nn.Module):
+    def __init__(self, d_model, num_heads, d_ff, dropout=0.1):
+        super(DecoderLayer, self).__init__()
+        self.masked_self_attn = MultiHeadAttention(d_model, num_heads) # Assuming MultiHeadAttention is defined
+        self.enc_dec_attn = MultiHeadAttention(d_model, num_heads)
+        self.feed_forward = PositionwiseFeedForward(d_model, d_ff) # Assuming PositionwiseFeedForward is defined
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, encoder_output, src_mask, tgt_mask):
+        # Masked multi-head attention sub-layer
+        attn_output, _ = self.masked_self_attn(x, x, x, tgt_mask)
+        # Residual connection and layer normalization
+        x = self.norm1(x &#43; self.dropout(attn_output))
+        # Encoder-decoder attention sub-layer
+        enc_dec_output, _ = self.enc_dec_attn(x, encoder_output, encoder_output, src_mask)
+        # Residual connection and layer normalization
+        x = self.norm2(x &#43; self.dropout(enc_dec_output))
+        # Position-wise feed-forward network
+        ff_output = self.feed_forward(x)
+        # Residual connection and layer normalization
+        x = self.norm3(x &#43; self.dropout(ff_output))
+        return x
+
+class Decoder(nn.Module):
+    def __init__(self, num_layers, d_model, num_heads, d_ff, dropout=0.1):
+        super(Decoder, self).__init__()
+        self.layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff, dropout)
+                                     for _ in range(num_layers)])
+
+    def forward(self, x, encoder_output, src_mask, tgt_mask):
+        for layer in self.layers:
+            x = layer(x, encoder_output, src_mask, tgt_mask)
+        return x
+class Transformer(nn.Module):
+    def __init__(self, src_vocab_size, tgt_vocab_size, num_layers, d_model, num_heads, d_ff, dropout=0.1):
+        super(Transformer, self).__init__()
+        self.embedding = nn.Embedding(src_vocab_size, d_model) # Source language embedding
+        self.pos_encoder = PositionalEncoding(d_model, dropout) # Assuming PositionalEncoding is defined
+        self.encoder = Encoder(num_layers, d_model, num_heads, d_ff, dropout)
+        self.decoder = Decoder(num_layers, d_model, num_heads, d_ff, dropout)
+        self.linear = nn.Linear(d_model, tgt_vocab_size) # Output linear layer
+        self.softmax = nn.LogSoftmax(dim=-1) # Apply softmax for probability distribution
+
+    def forward(self, src, tgt, src_mask, tgt_mask):
+        # Embed and add positional encoding to source and target sequences
+        src_embedded = self.pos_encoder(self.embedding(src))
+        tgt_embedded = self.pos_encoder(self.embedding(tgt))
+
+        # Encode the source sequence
+        encoder_output = self.encoder(src_embedded, src_mask)
+
+        # Decode the target sequence
+        decoder_output = self.decoder(tgt_embedded, encoder_output, src_mask, tgt_mask)
+
+        # Pass the decoder output through the linear layer and softmax
+        output = self.softmax(self.linear(decoder_output))
+        return output
+import torch.optim as optim
+import numpy as np
+
+# Define sequence length and vocabulary size
+sequence_length = 10
+vocab_size = 20  # Numbers from 0 to 19
+
+# Function to generate a random sequence
+def generate_sequence(length, vocab):
+    return torch.randint(0, vocab, (length,))
+
+# Function to reverse a sequence
+def reverse_sequence(sequence):
+    return torch.flip(sequence, dims=[0])
+
+# Generate training data
+num_samples = 1000
+train_data = []
+for _ in range(num_samples):
+    src_sequence = generate_sequence(sequence_length, vocab_size)
+    tgt_sequence = reverse_sequence(src_sequence)
+    train_data.append((src_sequence, tgt_sequence))
+
+# Example of a training sample
+src_sequence, tgt_sequence = train_data[0]
+print(&#34;Source Sequence:&#34;, src_sequence)
+print(&#34;Target Sequence:&#34;, tgt_sequence)
+from torch.utils.data import DataLoader, Dataset
+
+# Define a custom dataset class
+class SequenceDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+# Create the dataset
+train_dataset = SequenceDataset(train_data)
+
+# Define batch size
+batch_size = 32
+
+# Create the data loader
+train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+# Example of a batch
+for src_batch, tgt_batch in train_dataloader:
+    print(&#34;Source Batch Shape:&#34;, src_batch.shape)
+    print(&#34;Target Batch Shape:&#34;, tgt_batch.shape)
+    break
+# Model parameters
+embedding_dim = 64  # Dimension of the word embeddings
+num_heads = 2       # Number of attention heads
+num_layers = 2      # Number of encoder/decoder layers
+dropout = 0.1       # Dropout probability
+max_seq_length = sequence_length # Maximum sequence length for positional encoding
+
+# Instantiate the Transformer model
+model = Transformer(
+    src_vocab_size=vocab_size,
+    tgt_vocab_size=vocab_size,
+    num_layers=num_layers,
+    d_model=embedding_dim,
+    num_heads=num_heads,
+    d_ff=2048,  # 这里添加了 d_ff 参数，可根据需要调整
+    dropout=dropout
+)
+
+# Print the model architecture (optional)
+print(model)
+# Define the loss function (Cross-Entropy Loss)
+loss_function = nn.CrossEntropyLoss()
+
+# Define the optimizer (Adam)
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# Move the model to the appropriate device (CPU or GPU)
+device = torch.device(&#34;cuda&#34; if torch.cuda.is_available() else &#34;cpu&#34;)
+model = model.to(device)
+# Number of epochs
+num_epochs = 5000
+
+# Training loop
+for epoch in range(num_epochs):
+    model.train()  # Set the model to training mode
+    total_loss = 0
+
+    for src_batch, tgt_batch in train_dataloader:
+        # Move data to the device
+        src_batch = src_batch.to(device)
+        tgt_batch = tgt_batch.to(device)
+
+        # Generate masks
+        src_mask = (src_batch != 0).unsqueeze(1).unsqueeze(2)  # Assume 0 is the padding token
+        tgt_mask = (tgt_batch[:, :-1] != 0).unsqueeze(1).unsqueeze(2)
+
+        # Zero the gradients
+        optimizer.zero_grad()
+
+        # Forward pass
+        output = model(src_batch, tgt_batch[:, :-1], src_mask, tgt_mask)  # Shift right the target sequence
+
+        # Reshape the output and target to compute the loss
+        output = output.reshape(-1, vocab_size)
+        tgt = tgt_batch[:, 1:].reshape(-1) # Shift left the target sequence
+
+        # Calculate the loss
+        loss = loss_function(output, tgt)
+
+        # Backward pass and optimization
+        loss.backward()
+        optimizer.step()
+
+        total_loss &#43;= loss.item()
+
+    # Print the average loss for the epoch
+    print(f&#34;Epoch {epoch&#43;1}/{num_epochs}, Loss: {total_loss/len(train_dataloader)}&#34;)
+# Generate a test sequence
+test_sequence = generate_sequence(sequence_length, vocab_size).to(device)
+
+# Add a batch dimension
+test_sequence = test_sequence.unsqueeze(0)
+
+# Generate start token
+start_token = torch.tensor([[0]]).to(device) # Assuming 0 is the start token
+# Initialize the output sequence with the start token
+output_sequence = start_token
+
+# Generate masks
+src_mask = (test_sequence != 0).unsqueeze(1).unsqueeze(2)
+tgt_mask = (output_sequence != 0).unsqueeze(1).unsqueeze(2)
+
+# Autoregressive generation
+with torch.no_grad(): # Disable gradient calculation
+    for _ in range(sequence_length):
+        # Pass the input sequence and the current output sequence to the model
+        output = model(test_sequence, output_sequence, src_mask, tgt_mask)
+
+        # Get the last predicted token
+        predicted_token = torch.argmax(output[:, -1, :], dim=-1).unsqueeze(0)
+
+        # Append the predicted token to the output sequence
+        output_sequence = torch.cat((output_sequence, predicted_token), dim=1)
+
+# Remove the start token
+output_sequence = output_sequence[:, 1:]
+
+# Print the results
+print(&#34;Input Sequence:&#34;, test_sequence.squeeze())
+print(&#34;Predicted Sequence:&#34;, output_sequence.squeeze())
+print(&#34;Target Sequence:&#34;, reverse_sequence(test_sequence.squeeze()))
+">
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "/posts/"
+    }
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Pytorch实现基本的Transformer网络架构｜AI之路",
+      "item": "/posts/new/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Pytorch实现基本的Transformer网络架构｜AI之路",
+  "name": "Pytorch实现基本的Transformer网络架构｜AI之路",
+  "description": " 📚学习资源： Road Map AI tutor 🔧代码优化工具：\n豆包\nKaggle Notebook\nimport torch import torch.nn as nn import torch.nn.functional as F import math class MultiHeadAttention(nn.Module): def __init__(self, d_model, num_heads): \u0026#34;\u0026#34;\u0026#34; Initializes the MultiHeadAttention module. Args: d_model (int): The dimensionality of the input embeddings. num_heads (int): The number of attention heads. \u0026#34;\u0026#34;\u0026#34; super(MultiHeadAttention, self).__init__() assert d_model % num_heads == 0, \u0026#34;d_model must be divisible by num_heads\u0026#34; self.d_model = d_model self.num_heads = num_heads self.d_k = d_model // num_heads # Dimensionality of each head\u0026#39;s key, query, and value # Linear projection layers for Q, K, V for all heads self.W_Q = nn.Linear(d_model, d_model) self.W_K = nn.Linear(d_model, d_model) self.W_V = nn.Linear(d_model, d_model) # Linear layer for the final output self.W_O = nn.Linear(d_model, d_model) def scaled_dot_product_attention(self, Q, K, V, mask=None): \u0026#34;\u0026#34;\u0026#34; Computes scaled dot-product attention. Args: Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_k). K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_k). V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_v). mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None. Returns: torch.Tensor: Output tensor after attention weighting. torch.Tensor: Attention weights. \u0026#34;\u0026#34;\u0026#34; # 注意力分数 -\u0026gt; 注意力权重 -\u0026gt; 注意力权重与V值向量矩阵加权求和得到结果，每个序列位置的输出是所有值向量的加权组合 attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k) # (batch_size, num_heads, seq_len, seq_len) if mask is not None: attn_scores = attn_scores.masked_fill(mask == 0, -1e9) # Mask out invalid positions (batch_size, num_heads, seq_len, seq_len) attn_weights = F.softmax(attn_scores, dim=-1) # (batch_size, num_heads, seq_len, seq_len) output = torch.matmul(attn_weights, V) # (batch_size, seq_len, d_v) return output, attn_weights def split_heads(self, x): \u0026#34;\u0026#34;\u0026#34; Splits the input tensor into multiple heads. Args: x (torch.Tensor): Input tensor of shape (batch_size, seq_len, d_model). Returns: torch.Tensor: Tensor of shape (batch_size, num_heads, seq_len, d_k). \u0026#34;\u0026#34;\u0026#34; batch_size, seq_len, d_model = x.size() return x.view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2) def combine_heads(self, x): \u0026#34;\u0026#34;\u0026#34; Combines the multiple heads back into a single tensor. Args: x (torch.Tensor): Input tensor of shape (batch_size, num_heads, seq_len, d_k). Returns: torch.Tensor: Tensor of shape (batch_size, seq_len, d_model). \u0026#34;\u0026#34;\u0026#34; batch_size, num_heads, seq_len, d_k = x.size() return x.transpose(1, 2).contiguous().view(batch_size, seq_len, self.d_model) def forward(self, Q, K, V, mask=None): \u0026#34;\u0026#34;\u0026#34; Forward pass of the MultiHeadAttention module. Args: Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_model). K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_model). V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_model). mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None. Returns: torch.Tensor: Output tensor after Multi-Head Attention. torch.Tensor: Attention weights from all heads (averaged). \u0026#34;\u0026#34;\u0026#34; batch_size = Q.size(0) # 1. Linear projections and split into heads Q = self.split_heads(self.W_Q(Q)) # (batch_size, num_heads, seq_len, d_k) K = self.split_heads(self.W_K(K)) # (batch_size, num_heads, seq_len, d_k) V = self.split_heads(self.W_V(V)) # (batch_size, num_heads, seq_len, d_v) # 2. Apply scaled dot-product attention output, attn_weights = self.scaled_dot_product_attention(Q, K, V, mask) # (batch_size, num_heads, seq_len, d_v) # 3. Combine heads output = self.combine_heads(output) # (batch_size, seq_len, d_model) # 4. Linear output transformation output = self.W_O(output) # (batch_size, seq_len, d_model) # Average attention weights across heads for analysis attn_weights = torch.mean(attn_weights, dim=1) # (batch_size, seq_len, seq_len) return output, attn_weights class PositionwiseFeedForward(nn.Module): def __init__(self, d_model, d_ff): super(PositionwiseFeedForward, self).__init__() self.fc1 = nn.Linear(d_model, d_ff) self.fc2 = nn.Linear(d_ff, d_model) self.relu = nn.ReLU() def forward(self, x): return self.fc2(self.relu(self.fc1(x))) class PositionalEncoding(nn.Module): def __init__(self, d_model, dropout=0.1, max_len=5000): super(PositionalEncoding, self).__init__() self.dropout = nn.Dropout(p=dropout) pe = torch.zeros(max_len, d_model) position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1) div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)) pe[:, 0::2] = torch.sin(position * div_term) pe[:, 1::2] = torch.cos(position * div_term) pe = pe.unsqueeze(0).transpose(0, 1) self.register_buffer(\u0026#39;pe\u0026#39;, pe) def forward(self, x): x = x + self.pe[:x.size(0), :] return self.dropout(x) class EncoderLayer(nn.Module): def __init__(self, d_model, num_heads, d_ff, dropout=0.1): super(EncoderLayer, self).__init__() self.self_attn = MultiHeadAttention(d_model, num_heads) # Assuming MultiHeadAttention is defined self.feed_forward = PositionwiseFeedForward(d_model, d_ff) # Assuming PositionwiseFeedForward is defined self.norm1 = nn.LayerNorm(d_model) self.norm2 = nn.LayerNorm(d_model) self.dropout = nn.Dropout(dropout) def forward(self, x, mask): # Multi-head attention sub-layer attn_output, _ = self.self_attn(x, x, x, mask) # Residual connection and layer normalization x = self.norm1(x + self.dropout(attn_output)) # Position-wise feed-forward network ff_output = self.feed_forward(x) # Residual connection and layer normalization x = self.norm2(x + self.dropout(ff_output)) return x class Encoder(nn.Module): def __init__(self, num_layers, d_model, num_heads, d_ff, dropout=0.1): super(Encoder, self).__init__() self.layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)]) def forward(self, x, mask): for layer in self.layers: x = layer(x, mask) return x class DecoderLayer(nn.Module): def __init__(self, d_model, num_heads, d_ff, dropout=0.1): super(DecoderLayer, self).__init__() self.masked_self_attn = MultiHeadAttention(d_model, num_heads) # Assuming MultiHeadAttention is defined self.enc_dec_attn = MultiHeadAttention(d_model, num_heads) self.feed_forward = PositionwiseFeedForward(d_model, d_ff) # Assuming PositionwiseFeedForward is defined self.norm1 = nn.LayerNorm(d_model) self.norm2 = nn.LayerNorm(d_model) self.norm3 = nn.LayerNorm(d_model) self.dropout = nn.Dropout(dropout) def forward(self, x, encoder_output, src_mask, tgt_mask): # Masked multi-head attention sub-layer attn_output, _ = self.masked_self_attn(x, x, x, tgt_mask) # Residual connection and layer normalization x = self.norm1(x + self.dropout(attn_output)) # Encoder-decoder attention sub-layer enc_dec_output, _ = self.enc_dec_attn(x, encoder_output, encoder_output, src_mask) # Residual connection and layer normalization x = self.norm2(x + self.dropout(enc_dec_output)) # Position-wise feed-forward network ff_output = self.feed_forward(x) # Residual connection and layer normalization x = self.norm3(x + self.dropout(ff_output)) return x class Decoder(nn.Module): def __init__(self, num_layers, d_model, num_heads, d_ff, dropout=0.1): super(Decoder, self).__init__() self.layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)]) def forward(self, x, encoder_output, src_mask, tgt_mask): for layer in self.layers: x = layer(x, encoder_output, src_mask, tgt_mask) return x class Transformer(nn.Module): def __init__(self, src_vocab_size, tgt_vocab_size, num_layers, d_model, num_heads, d_ff, dropout=0.1): super(Transformer, self).__init__() self.embedding = nn.Embedding(src_vocab_size, d_model) # Source language embedding self.pos_encoder = PositionalEncoding(d_model, dropout) # Assuming PositionalEncoding is defined self.encoder = Encoder(num_layers, d_model, num_heads, d_ff, dropout) self.decoder = Decoder(num_layers, d_model, num_heads, d_ff, dropout) self.linear = nn.Linear(d_model, tgt_vocab_size) # Output linear layer self.softmax = nn.LogSoftmax(dim=-1) # Apply softmax for probability distribution def forward(self, src, tgt, src_mask, tgt_mask): # Embed and add positional encoding to source and target sequences src_embedded = self.pos_encoder(self.embedding(src)) tgt_embedded = self.pos_encoder(self.embedding(tgt)) # Encode the source sequence encoder_output = self.encoder(src_embedded, src_mask) # Decode the target sequence decoder_output = self.decoder(tgt_embedded, encoder_output, src_mask, tgt_mask) # Pass the decoder output through the linear layer and softmax output = self.softmax(self.linear(decoder_output)) return output import torch.optim as optim import numpy as np # Define sequence length and vocabulary size sequence_length = 10 vocab_size = 20 # Numbers from 0 to 19 # Function to generate a random sequence def generate_sequence(length, vocab): return torch.randint(0, vocab, (length,)) # Function to reverse a sequence def reverse_sequence(sequence): return torch.flip(sequence, dims=[0]) # Generate training data num_samples = 1000 train_data = [] for _ in range(num_samples): src_sequence = generate_sequence(sequence_length, vocab_size) tgt_sequence = reverse_sequence(src_sequence) train_data.append((src_sequence, tgt_sequence)) # Example of a training sample src_sequence, tgt_sequence = train_data[0] print(\u0026#34;Source Sequence:\u0026#34;, src_sequence) print(\u0026#34;Target Sequence:\u0026#34;, tgt_sequence) from torch.utils.data import DataLoader, Dataset # Define a custom dataset class class SequenceDataset(Dataset): def __init__(self, data): self.data = data def __len__(self): return len(self.data) def __getitem__(self, idx): return self.data[idx] # Create the dataset train_dataset = SequenceDataset(train_data) # Define batch size batch_size = 32 # Create the data loader train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True) # Example of a batch for src_batch, tgt_batch in train_dataloader: print(\u0026#34;Source Batch Shape:\u0026#34;, src_batch.shape) print(\u0026#34;Target Batch Shape:\u0026#34;, tgt_batch.shape) break # Model parameters embedding_dim = 64 # Dimension of the word embeddings num_heads = 2 # Number of attention heads num_layers = 2 # Number of encoder/decoder layers dropout = 0.1 # Dropout probability max_seq_length = sequence_length # Maximum sequence length for positional encoding # Instantiate the Transformer model model = Transformer( src_vocab_size=vocab_size, tgt_vocab_size=vocab_size, num_layers=num_layers, d_model=embedding_dim, num_heads=num_heads, d_ff=2048, # 这里添加了 d_ff 参数，可根据需要调整 dropout=dropout ) # Print the model architecture (optional) print(model) # Define the loss function (Cross-Entropy Loss) loss_function = nn.CrossEntropyLoss() # Define the optimizer (Adam) optimizer = optim.Adam(model.parameters(), lr=0.001) # Move the model to the appropriate device (CPU or GPU) device = torch.device(\u0026#34;cuda\u0026#34; if torch.cuda.is_available() else \u0026#34;cpu\u0026#34;) model = model.to(device) # Number of epochs num_epochs = 5000 # Training loop for epoch in range(num_epochs): model.train() # Set the model to training mode total_loss = 0 for src_batch, tgt_batch in train_dataloader: # Move data to the device src_batch = src_batch.to(device) tgt_batch = tgt_batch.to(device) # Generate masks src_mask = (src_batch != 0).unsqueeze(1).unsqueeze(2) # Assume 0 is the padding token tgt_mask = (tgt_batch[:, :-1] != 0).unsqueeze(1).unsqueeze(2) # Zero the gradients optimizer.zero_grad() # Forward pass output = model(src_batch, tgt_batch[:, :-1], src_mask, tgt_mask) # Shift right the target sequence # Reshape the output and target to compute the loss output = output.reshape(-1, vocab_size) tgt = tgt_batch[:, 1:].reshape(-1) # Shift left the target sequence # Calculate the loss loss = loss_function(output, tgt) # Backward pass and optimization loss.backward() optimizer.step() total_loss += loss.item() # Print the average loss for the epoch print(f\u0026#34;Epoch {epoch+1}/{num_epochs}, Loss: {total_loss/len(train_dataloader)}\u0026#34;) # Generate a test sequence test_sequence = generate_sequence(sequence_length, vocab_size).to(device) # Add a batch dimension test_sequence = test_sequence.unsqueeze(0) # Generate start token start_token = torch.tensor([[0]]).to(device) # Assuming 0 is the start token # Initialize the output sequence with the start token output_sequence = start_token # Generate masks src_mask = (test_sequence != 0).unsqueeze(1).unsqueeze(2) tgt_mask = (output_sequence != 0).unsqueeze(1).unsqueeze(2) # Autoregressive generation with torch.no_grad(): # Disable gradient calculation for _ in range(sequence_length): # Pass the input sequence and the current output sequence to the model output = model(test_sequence, output_sequence, src_mask, tgt_mask) # Get the last predicted token predicted_token = torch.argmax(output[:, -1, :], dim=-1).unsqueeze(0) # Append the predicted token to the output sequence output_sequence = torch.cat((output_sequence, predicted_token), dim=1) # Remove the start token output_sequence = output_sequence[:, 1:] # Print the results print(\u0026#34;Input Sequence:\u0026#34;, test_sequence.squeeze()) print(\u0026#34;Predicted Sequence:\u0026#34;, output_sequence.squeeze()) print(\u0026#34;Target Sequence:\u0026#34;, reverse_sequence(test_sequence.squeeze())) ",
+  "keywords": [
+    "技术"
+  ],
+  "articleBody": " 📚学习资源： Road Map AI tutor 🔧代码优化工具：\n豆包\nKaggle Notebook\nimport torch import torch.nn as nn import torch.nn.functional as F import math class MultiHeadAttention(nn.Module): def __init__(self, d_model, num_heads): \"\"\" Initializes the MultiHeadAttention module. Args: d_model (int): The dimensionality of the input embeddings. num_heads (int): The number of attention heads. \"\"\" super(MultiHeadAttention, self).__init__() assert d_model % num_heads == 0, \"d_model must be divisible by num_heads\" self.d_model = d_model self.num_heads = num_heads self.d_k = d_model // num_heads # Dimensionality of each head's key, query, and value # Linear projection layers for Q, K, V for all heads self.W_Q = nn.Linear(d_model, d_model) self.W_K = nn.Linear(d_model, d_model) self.W_V = nn.Linear(d_model, d_model) # Linear layer for the final output self.W_O = nn.Linear(d_model, d_model) def scaled_dot_product_attention(self, Q, K, V, mask=None): \"\"\" Computes scaled dot-product attention. Args: Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_k). K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_k). V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_v). mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None. Returns: torch.Tensor: Output tensor after attention weighting. torch.Tensor: Attention weights. \"\"\" # 注意力分数 -\u003e 注意力权重 -\u003e 注意力权重与V值向量矩阵加权求和得到结果，每个序列位置的输出是所有值向量的加权组合 attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k) # (batch_size, num_heads, seq_len, seq_len) if mask is not None: attn_scores = attn_scores.masked_fill(mask == 0, -1e9) # Mask out invalid positions (batch_size, num_heads, seq_len, seq_len) attn_weights = F.softmax(attn_scores, dim=-1) # (batch_size, num_heads, seq_len, seq_len) output = torch.matmul(attn_weights, V) # (batch_size, seq_len, d_v) return output, attn_weights def split_heads(self, x): \"\"\" Splits the input tensor into multiple heads. Args: x (torch.Tensor): Input tensor of shape (batch_size, seq_len, d_model). Returns: torch.Tensor: Tensor of shape (batch_size, num_heads, seq_len, d_k). \"\"\" batch_size, seq_len, d_model = x.size() return x.view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2) def combine_heads(self, x): \"\"\" Combines the multiple heads back into a single tensor. Args: x (torch.Tensor): Input tensor of shape (batch_size, num_heads, seq_len, d_k). Returns: torch.Tensor: Tensor of shape (batch_size, seq_len, d_model). \"\"\" batch_size, num_heads, seq_len, d_k = x.size() return x.transpose(1, 2).contiguous().view(batch_size, seq_len, self.d_model) def forward(self, Q, K, V, mask=None): \"\"\" Forward pass of the MultiHeadAttention module. Args: Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_model). K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_model). V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_model). mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None. Returns: torch.Tensor: Output tensor after Multi-Head Attention. torch.Tensor: Attention weights from all heads (averaged). \"\"\" batch_size = Q.size(0) # 1. Linear projections and split into heads Q = self.split_heads(self.W_Q(Q)) # (batch_size, num_heads, seq_len, d_k) K = self.split_heads(self.W_K(K)) # (batch_size, num_heads, seq_len, d_k) V = self.split_heads(self.W_V(V)) # (batch_size, num_heads, seq_len, d_v) # 2. Apply scaled dot-product attention output, attn_weights = self.scaled_dot_product_attention(Q, K, V, mask) # (batch_size, num_heads, seq_len, d_v) # 3. Combine heads output = self.combine_heads(output) # (batch_size, seq_len, d_model) # 4. Linear output transformation output = self.W_O(output) # (batch_size, seq_len, d_model) # Average attention weights across heads for analysis attn_weights = torch.mean(attn_weights, dim=1) # (batch_size, seq_len, seq_len) return output, attn_weights class PositionwiseFeedForward(nn.Module): def __init__(self, d_model, d_ff): super(PositionwiseFeedForward, self).__init__() self.fc1 = nn.Linear(d_model, d_ff) self.fc2 = nn.Linear(d_ff, d_model) self.relu = nn.ReLU() def forward(self, x): return self.fc2(self.relu(self.fc1(x))) class PositionalEncoding(nn.Module): def __init__(self, d_model, dropout=0.1, max_len=5000): super(PositionalEncoding, self).__init__() self.dropout = nn.Dropout(p=dropout) pe = torch.zeros(max_len, d_model) position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1) div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)) pe[:, 0::2] = torch.sin(position * div_term) pe[:, 1::2] = torch.cos(position * div_term) pe = pe.unsqueeze(0).transpose(0, 1) self.register_buffer('pe', pe) def forward(self, x): x = x + self.pe[:x.size(0), :] return self.dropout(x) class EncoderLayer(nn.Module): def __init__(self, d_model, num_heads, d_ff, dropout=0.1): super(EncoderLayer, self).__init__() self.self_attn = MultiHeadAttention(d_model, num_heads) # Assuming MultiHeadAttention is defined self.feed_forward = PositionwiseFeedForward(d_model, d_ff) # Assuming PositionwiseFeedForward is defined self.norm1 = nn.LayerNorm(d_model) self.norm2 = nn.LayerNorm(d_model) self.dropout = nn.Dropout(dropout) def forward(self, x, mask): # Multi-head attention sub-layer attn_output, _ = self.self_attn(x, x, x, mask) # Residual connection and layer normalization x = self.norm1(x + self.dropout(attn_output)) # Position-wise feed-forward network ff_output = self.feed_forward(x) # Residual connection and layer normalization x = self.norm2(x + self.dropout(ff_output)) return x class Encoder(nn.Module): def __init__(self, num_layers, d_model, num_heads, d_ff, dropout=0.1): super(Encoder, self).__init__() self.layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)]) def forward(self, x, mask): for layer in self.layers: x = layer(x, mask) return x class DecoderLayer(nn.Module): def __init__(self, d_model, num_heads, d_ff, dropout=0.1): super(DecoderLayer, self).__init__() self.masked_self_attn = MultiHeadAttention(d_model, num_heads) # Assuming MultiHeadAttention is defined self.enc_dec_attn = MultiHeadAttention(d_model, num_heads) self.feed_forward = PositionwiseFeedForward(d_model, d_ff) # Assuming PositionwiseFeedForward is defined self.norm1 = nn.LayerNorm(d_model) self.norm2 = nn.LayerNorm(d_model) self.norm3 = nn.LayerNorm(d_model) self.dropout = nn.Dropout(dropout) def forward(self, x, encoder_output, src_mask, tgt_mask): # Masked multi-head attention sub-layer attn_output, _ = self.masked_self_attn(x, x, x, tgt_mask) # Residual connection and layer normalization x = self.norm1(x + self.dropout(attn_output)) # Encoder-decoder attention sub-layer enc_dec_output, _ = self.enc_dec_attn(x, encoder_output, encoder_output, src_mask) # Residual connection and layer normalization x = self.norm2(x + self.dropout(enc_dec_output)) # Position-wise feed-forward network ff_output = self.feed_forward(x) # Residual connection and layer normalization x = self.norm3(x + self.dropout(ff_output)) return x class Decoder(nn.Module): def __init__(self, num_layers, d_model, num_heads, d_ff, dropout=0.1): super(Decoder, self).__init__() self.layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)]) def forward(self, x, encoder_output, src_mask, tgt_mask): for layer in self.layers: x = layer(x, encoder_output, src_mask, tgt_mask) return x class Transformer(nn.Module): def __init__(self, src_vocab_size, tgt_vocab_size, num_layers, d_model, num_heads, d_ff, dropout=0.1): super(Transformer, self).__init__() self.embedding = nn.Embedding(src_vocab_size, d_model) # Source language embedding self.pos_encoder = PositionalEncoding(d_model, dropout) # Assuming PositionalEncoding is defined self.encoder = Encoder(num_layers, d_model, num_heads, d_ff, dropout) self.decoder = Decoder(num_layers, d_model, num_heads, d_ff, dropout) self.linear = nn.Linear(d_model, tgt_vocab_size) # Output linear layer self.softmax = nn.LogSoftmax(dim=-1) # Apply softmax for probability distribution def forward(self, src, tgt, src_mask, tgt_mask): # Embed and add positional encoding to source and target sequences src_embedded = self.pos_encoder(self.embedding(src)) tgt_embedded = self.pos_encoder(self.embedding(tgt)) # Encode the source sequence encoder_output = self.encoder(src_embedded, src_mask) # Decode the target sequence decoder_output = self.decoder(tgt_embedded, encoder_output, src_mask, tgt_mask) # Pass the decoder output through the linear layer and softmax output = self.softmax(self.linear(decoder_output)) return output import torch.optim as optim import numpy as np # Define sequence length and vocabulary size sequence_length = 10 vocab_size = 20 # Numbers from 0 to 19 # Function to generate a random sequence def generate_sequence(length, vocab): return torch.randint(0, vocab, (length,)) # Function to reverse a sequence def reverse_sequence(sequence): return torch.flip(sequence, dims=[0]) # Generate training data num_samples = 1000 train_data = [] for _ in range(num_samples): src_sequence = generate_sequence(sequence_length, vocab_size) tgt_sequence = reverse_sequence(src_sequence) train_data.append((src_sequence, tgt_sequence)) # Example of a training sample src_sequence, tgt_sequence = train_data[0] print(\"Source Sequence:\", src_sequence) print(\"Target Sequence:\", tgt_sequence) from torch.utils.data import DataLoader, Dataset # Define a custom dataset class class SequenceDataset(Dataset): def __init__(self, data): self.data = data def __len__(self): return len(self.data) def __getitem__(self, idx): return self.data[idx] # Create the dataset train_dataset = SequenceDataset(train_data) # Define batch size batch_size = 32 # Create the data loader train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True) # Example of a batch for src_batch, tgt_batch in train_dataloader: print(\"Source Batch Shape:\", src_batch.shape) print(\"Target Batch Shape:\", tgt_batch.shape) break # Model parameters embedding_dim = 64 # Dimension of the word embeddings num_heads = 2 # Number of attention heads num_layers = 2 # Number of encoder/decoder layers dropout = 0.1 # Dropout probability max_seq_length = sequence_length # Maximum sequence length for positional encoding # Instantiate the Transformer model model = Transformer( src_vocab_size=vocab_size, tgt_vocab_size=vocab_size, num_layers=num_layers, d_model=embedding_dim, num_heads=num_heads, d_ff=2048, # 这里添加了 d_ff 参数，可根据需要调整 dropout=dropout ) # Print the model architecture (optional) print(model) # Define the loss function (Cross-Entropy Loss) loss_function = nn.CrossEntropyLoss() # Define the optimizer (Adam) optimizer = optim.Adam(model.parameters(), lr=0.001) # Move the model to the appropriate device (CPU or GPU) device = torch.device(\"cuda\" if torch.cuda.is_available() else \"cpu\") model = model.to(device) # Number of epochs num_epochs = 5000 # Training loop for epoch in range(num_epochs): model.train() # Set the model to training mode total_loss = 0 for src_batch, tgt_batch in train_dataloader: # Move data to the device src_batch = src_batch.to(device) tgt_batch = tgt_batch.to(device) # Generate masks src_mask = (src_batch != 0).unsqueeze(1).unsqueeze(2) # Assume 0 is the padding token tgt_mask = (tgt_batch[:, :-1] != 0).unsqueeze(1).unsqueeze(2) # Zero the gradients optimizer.zero_grad() # Forward pass output = model(src_batch, tgt_batch[:, :-1], src_mask, tgt_mask) # Shift right the target sequence # Reshape the output and target to compute the loss output = output.reshape(-1, vocab_size) tgt = tgt_batch[:, 1:].reshape(-1) # Shift left the target sequence # Calculate the loss loss = loss_function(output, tgt) # Backward pass and optimization loss.backward() optimizer.step() total_loss += loss.item() # Print the average loss for the epoch print(f\"Epoch {epoch+1}/{num_epochs}, Loss: {total_loss/len(train_dataloader)}\") # Generate a test sequence test_sequence = generate_sequence(sequence_length, vocab_size).to(device) # Add a batch dimension test_sequence = test_sequence.unsqueeze(0) # Generate start token start_token = torch.tensor([[0]]).to(device) # Assuming 0 is the start token # Initialize the output sequence with the start token output_sequence = start_token # Generate masks src_mask = (test_sequence != 0).unsqueeze(1).unsqueeze(2) tgt_mask = (output_sequence != 0).unsqueeze(1).unsqueeze(2) # Autoregressive generation with torch.no_grad(): # Disable gradient calculation for _ in range(sequence_length): # Pass the input sequence and the current output sequence to the model output = model(test_sequence, output_sequence, src_mask, tgt_mask) # Get the last predicted token predicted_token = torch.argmax(output[:, -1, :], dim=-1).unsqueeze(0) # Append the predicted token to the output sequence output_sequence = torch.cat((output_sequence, predicted_token), dim=1) # Remove the start token output_sequence = output_sequence[:, 1:] # Print the results print(\"Input Sequence:\", test_sequence.squeeze()) print(\"Predicted Sequence:\", output_sequence.squeeze()) print(\"Target Sequence:\", reverse_sequence(test_sequence.squeeze())) ",
+  "wordCount" : "1512",
+  "inLanguage": "en",
+  "image":"/%3Cimage%20path/url%3E","datePublished": "0001-01-01T00:00:00Z",
+  "dateModified": "0001-01-01T00:00:00Z",
+  "author":{
+    "@type": "Person",
+    "name": "Me"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "/posts/new/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MekeyPan",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "/favicon.ico"
+    }
+  }
+}
+</script>
+</head>
+
+<body class="" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "dark") {
+        document.body.classList.add('dark');
+    } else if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('dark');
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="/" accesskey="h" title="Home (Alt + H)">
+                <img src="/icon.png" alt="" aria-label="logo"
+                    height="35">Home</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="/">Home</a>&nbsp;»&nbsp;<a href="/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      Pytorch实现基本的Transformer网络架构｜AI之路
+    </h1>
+    <div class="post-meta">8 min&nbsp;·&nbsp;1512 words&nbsp;·&nbsp;Me
+
+</div>
+  </header> 
+
+  <div class="post-content"><blockquote>
+<p>📚学习资源： <br>
+Road Map <a href="https://roadmap.sh/ai">AI tutor</a> <br>
+🔧代码优化工具：<br>
+豆包</p></blockquote>
+<blockquote>
+<p>Kaggle <a href="https://www.kaggle.com/code/mikeypan0721/learn-transformer/edit">Notebook</a></p></blockquote>
+<hr>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> torch
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> torch.nn <span style="color:#66d9ef">as</span> nn
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> torch.nn.functional <span style="color:#66d9ef">as</span> F
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> math
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">MultiHeadAttention</span>(nn<span style="color:#f92672">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, d_model, num_heads):
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Initializes the MultiHeadAttention module.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Args:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            d_model (int): The dimensionality of the input embeddings.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            num_heads (int): The number of attention heads.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        &#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>        super(MultiHeadAttention, self)<span style="color:#f92672">.</span>__init__()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">assert</span> d_model <span style="color:#f92672">%</span> num_heads <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span>, <span style="color:#e6db74">&#34;d_model must be divisible by num_heads&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>d_model <span style="color:#f92672">=</span> d_model
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>num_heads <span style="color:#f92672">=</span> num_heads
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>d_k <span style="color:#f92672">=</span> d_model <span style="color:#f92672">//</span> num_heads  <span style="color:#75715e"># Dimensionality of each head&#39;s key, query, and value</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Linear projection layers for Q, K, V for all heads</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>W_Q <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Linear(d_model, d_model)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>W_K <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Linear(d_model, d_model)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>W_V <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Linear(d_model, d_model)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Linear layer for the final output</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>W_O <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Linear(d_model, d_model)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">scaled_dot_product_attention</span>(self, Q, K, V, mask<span style="color:#f92672">=</span><span style="color:#66d9ef">None</span>):
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Computes scaled dot-product attention.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Args:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_k).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_k).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_v).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Returns:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            torch.Tensor: Output tensor after attention weighting.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            torch.Tensor: Attention weights.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        &#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># 注意力分数 -&gt; 注意力权重 -&gt; 注意力权重与V值向量矩阵加权求和得到结果，每个序列位置的输出是所有值向量的加权组合</span>
+</span></span><span style="display:flex;"><span>        
+</span></span><span style="display:flex;"><span>        attn_scores <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>matmul(Q, K<span style="color:#f92672">.</span>transpose(<span style="color:#f92672">-</span><span style="color:#ae81ff">2</span>, <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>)) <span style="color:#f92672">/</span> math<span style="color:#f92672">.</span>sqrt(self<span style="color:#f92672">.</span>d_k)  <span style="color:#75715e"># (batch_size, num_heads, seq_len, seq_len)</span>
+</span></span><span style="display:flex;"><span>        
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> mask <span style="color:#f92672">is</span> <span style="color:#f92672">not</span> <span style="color:#66d9ef">None</span>:
+</span></span><span style="display:flex;"><span>            attn_scores <span style="color:#f92672">=</span> attn_scores<span style="color:#f92672">.</span>masked_fill(mask <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span>, <span style="color:#f92672">-</span><span style="color:#ae81ff">1e9</span>)  <span style="color:#75715e"># Mask out invalid positions  (batch_size, num_heads, seq_len, seq_len)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        attn_weights <span style="color:#f92672">=</span> F<span style="color:#f92672">.</span>softmax(attn_scores, dim<span style="color:#f92672">=-</span><span style="color:#ae81ff">1</span>)  <span style="color:#75715e"># (batch_size, num_heads, seq_len, seq_len)</span>
+</span></span><span style="display:flex;"><span>        output <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>matmul(attn_weights, V)  <span style="color:#75715e"># (batch_size, seq_len, d_v)</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> output, attn_weights
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">split_heads</span>(self, x):
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Splits the input tensor into multiple heads.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Args:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, d_model).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Returns:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            torch.Tensor: Tensor of shape (batch_size, num_heads, seq_len, d_k).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        &#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>        batch_size, seq_len, d_model <span style="color:#f92672">=</span> x<span style="color:#f92672">.</span>size()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> x<span style="color:#f92672">.</span>view(batch_size, seq_len, self<span style="color:#f92672">.</span>num_heads, self<span style="color:#f92672">.</span>d_k)<span style="color:#f92672">.</span>transpose(<span style="color:#ae81ff">1</span>, <span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">combine_heads</span>(self, x):
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Combines the multiple heads back into a single tensor.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Args:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            x (torch.Tensor): Input tensor of shape (batch_size, num_heads, seq_len, d_k).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Returns:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            torch.Tensor: Tensor of shape (batch_size, seq_len, d_model).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        &#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>        batch_size, num_heads, seq_len, d_k <span style="color:#f92672">=</span> x<span style="color:#f92672">.</span>size()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> x<span style="color:#f92672">.</span>transpose(<span style="color:#ae81ff">1</span>, <span style="color:#ae81ff">2</span>)<span style="color:#f92672">.</span>contiguous()<span style="color:#f92672">.</span>view(batch_size, seq_len, self<span style="color:#f92672">.</span>d_model)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, Q, K, V, mask<span style="color:#f92672">=</span><span style="color:#66d9ef">None</span>):
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Forward pass of the MultiHeadAttention module.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Args:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, d_model).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            K (torch.Tensor): Key tensor of shape (batch_size, seq_len, d_model).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            V (torch.Tensor): Value tensor of shape (batch_size, seq_len, d_model).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            mask (torch.Tensor, optional): Masking tensor to prevent attention to certain positions. Defaults to None.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        Returns:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            torch.Tensor: Output tensor after Multi-Head Attention.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            torch.Tensor: Attention weights from all heads (averaged).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">        &#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>        batch_size <span style="color:#f92672">=</span> Q<span style="color:#f92672">.</span>size(<span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># 1. Linear projections and split into heads</span>
+</span></span><span style="display:flex;"><span>        Q <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>split_heads(self<span style="color:#f92672">.</span>W_Q(Q))  <span style="color:#75715e"># (batch_size, num_heads, seq_len, d_k)</span>
+</span></span><span style="display:flex;"><span>        K <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>split_heads(self<span style="color:#f92672">.</span>W_K(K))  <span style="color:#75715e"># (batch_size, num_heads, seq_len, d_k)</span>
+</span></span><span style="display:flex;"><span>        V <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>split_heads(self<span style="color:#f92672">.</span>W_V(V))  <span style="color:#75715e"># (batch_size, num_heads, seq_len, d_v)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># 2. Apply scaled dot-product attention</span>
+</span></span><span style="display:flex;"><span>        output, attn_weights <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>scaled_dot_product_attention(Q, K, V, mask)  <span style="color:#75715e"># (batch_size, num_heads, seq_len, d_v)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># 3. Combine heads</span>
+</span></span><span style="display:flex;"><span>        output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>combine_heads(output)  <span style="color:#75715e"># (batch_size, seq_len, d_model)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># 4. Linear output transformation</span>
+</span></span><span style="display:flex;"><span>        output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>W_O(output)  <span style="color:#75715e"># (batch_size, seq_len, d_model)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Average attention weights across heads for analysis</span>
+</span></span><span style="display:flex;"><span>        attn_weights <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>mean(attn_weights, dim<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>) <span style="color:#75715e"># (batch_size, seq_len, seq_len)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> output, attn_weights
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">PositionwiseFeedForward</span>(nn<span style="color:#f92672">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, d_model, d_ff):
+</span></span><span style="display:flex;"><span>        super(PositionwiseFeedForward, self)<span style="color:#f92672">.</span>__init__()
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc1 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Linear(d_model, d_ff)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc2 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Linear(d_ff, d_model)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>relu <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>ReLU()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, x):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>fc2(self<span style="color:#f92672">.</span>relu(self<span style="color:#f92672">.</span>fc1(x)))
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">PositionalEncoding</span>(nn<span style="color:#f92672">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, d_model, dropout<span style="color:#f92672">=</span><span style="color:#ae81ff">0.1</span>, max_len<span style="color:#f92672">=</span><span style="color:#ae81ff">5000</span>):
+</span></span><span style="display:flex;"><span>        super(PositionalEncoding, self)<span style="color:#f92672">.</span>__init__()
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>dropout <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Dropout(p<span style="color:#f92672">=</span>dropout)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        pe <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>zeros(max_len, d_model)
+</span></span><span style="display:flex;"><span>        position <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>arange(<span style="color:#ae81ff">0</span>, max_len, dtype<span style="color:#f92672">=</span>torch<span style="color:#f92672">.</span>float)<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>        div_term <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>exp(torch<span style="color:#f92672">.</span>arange(<span style="color:#ae81ff">0</span>, d_model, <span style="color:#ae81ff">2</span>)<span style="color:#f92672">.</span>float() <span style="color:#f92672">*</span> (<span style="color:#f92672">-</span>math<span style="color:#f92672">.</span>log(<span style="color:#ae81ff">10000.0</span>) <span style="color:#f92672">/</span> d_model))
+</span></span><span style="display:flex;"><span>        pe[:, <span style="color:#ae81ff">0</span>::<span style="color:#ae81ff">2</span>] <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>sin(position <span style="color:#f92672">*</span> div_term)
+</span></span><span style="display:flex;"><span>        pe[:, <span style="color:#ae81ff">1</span>::<span style="color:#ae81ff">2</span>] <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>cos(position <span style="color:#f92672">*</span> div_term)
+</span></span><span style="display:flex;"><span>        pe <span style="color:#f92672">=</span> pe<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">0</span>)<span style="color:#f92672">.</span>transpose(<span style="color:#ae81ff">0</span>, <span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>register_buffer(<span style="color:#e6db74">&#39;pe&#39;</span>, pe)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, x):
+</span></span><span style="display:flex;"><span>        x <span style="color:#f92672">=</span> x <span style="color:#f92672">+</span> self<span style="color:#f92672">.</span>pe[:x<span style="color:#f92672">.</span>size(<span style="color:#ae81ff">0</span>), :]
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>dropout(x)
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">EncoderLayer</span>(nn<span style="color:#f92672">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, d_model, num_heads, d_ff, dropout<span style="color:#f92672">=</span><span style="color:#ae81ff">0.1</span>):
+</span></span><span style="display:flex;"><span>        super(EncoderLayer, self)<span style="color:#f92672">.</span>__init__()
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>self_attn <span style="color:#f92672">=</span> MultiHeadAttention(d_model, num_heads) <span style="color:#75715e"># Assuming MultiHeadAttention is defined</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>feed_forward <span style="color:#f92672">=</span> PositionwiseFeedForward(d_model, d_ff) <span style="color:#75715e"># Assuming PositionwiseFeedForward is defined</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>norm1 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>LayerNorm(d_model)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>norm2 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>LayerNorm(d_model)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>dropout <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Dropout(dropout)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, x, mask):
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Multi-head attention sub-layer</span>
+</span></span><span style="display:flex;"><span>        attn_output, _ <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>self_attn(x, x, x, mask)
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Residual connection and layer normalization</span>
+</span></span><span style="display:flex;"><span>        x <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>norm1(x <span style="color:#f92672">+</span> self<span style="color:#f92672">.</span>dropout(attn_output))
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Position-wise feed-forward network</span>
+</span></span><span style="display:flex;"><span>        ff_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>feed_forward(x)
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Residual connection and layer normalization</span>
+</span></span><span style="display:flex;"><span>        x <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>norm2(x <span style="color:#f92672">+</span> self<span style="color:#f92672">.</span>dropout(ff_output))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> x
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Encoder</span>(nn<span style="color:#f92672">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, num_layers, d_model, num_heads, d_ff, dropout<span style="color:#f92672">=</span><span style="color:#ae81ff">0.1</span>):
+</span></span><span style="display:flex;"><span>        super(Encoder, self)<span style="color:#f92672">.</span>__init__()
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>layers <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout)
+</span></span><span style="display:flex;"><span>                                     <span style="color:#66d9ef">for</span> _ <span style="color:#f92672">in</span> range(num_layers)])
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, x, mask):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> layer <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>layers:
+</span></span><span style="display:flex;"><span>            x <span style="color:#f92672">=</span> layer(x, mask)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> x
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">DecoderLayer</span>(nn<span style="color:#f92672">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, d_model, num_heads, d_ff, dropout<span style="color:#f92672">=</span><span style="color:#ae81ff">0.1</span>):
+</span></span><span style="display:flex;"><span>        super(DecoderLayer, self)<span style="color:#f92672">.</span>__init__()
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>masked_self_attn <span style="color:#f92672">=</span> MultiHeadAttention(d_model, num_heads) <span style="color:#75715e"># Assuming MultiHeadAttention is defined</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>enc_dec_attn <span style="color:#f92672">=</span> MultiHeadAttention(d_model, num_heads)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>feed_forward <span style="color:#f92672">=</span> PositionwiseFeedForward(d_model, d_ff) <span style="color:#75715e"># Assuming PositionwiseFeedForward is defined</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>norm1 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>LayerNorm(d_model)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>norm2 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>LayerNorm(d_model)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>norm3 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>LayerNorm(d_model)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>dropout <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Dropout(dropout)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, x, encoder_output, src_mask, tgt_mask):
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Masked multi-head attention sub-layer</span>
+</span></span><span style="display:flex;"><span>        attn_output, _ <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>masked_self_attn(x, x, x, tgt_mask)
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Residual connection and layer normalization</span>
+</span></span><span style="display:flex;"><span>        x <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>norm1(x <span style="color:#f92672">+</span> self<span style="color:#f92672">.</span>dropout(attn_output))
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Encoder-decoder attention sub-layer</span>
+</span></span><span style="display:flex;"><span>        enc_dec_output, _ <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>enc_dec_attn(x, encoder_output, encoder_output, src_mask)
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Residual connection and layer normalization</span>
+</span></span><span style="display:flex;"><span>        x <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>norm2(x <span style="color:#f92672">+</span> self<span style="color:#f92672">.</span>dropout(enc_dec_output))
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Position-wise feed-forward network</span>
+</span></span><span style="display:flex;"><span>        ff_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>feed_forward(x)
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Residual connection and layer normalization</span>
+</span></span><span style="display:flex;"><span>        x <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>norm3(x <span style="color:#f92672">+</span> self<span style="color:#f92672">.</span>dropout(ff_output))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> x
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Decoder</span>(nn<span style="color:#f92672">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, num_layers, d_model, num_heads, d_ff, dropout<span style="color:#f92672">=</span><span style="color:#ae81ff">0.1</span>):
+</span></span><span style="display:flex;"><span>        super(Decoder, self)<span style="color:#f92672">.</span>__init__()
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>layers <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>ModuleList([DecoderLayer(d_model, num_heads, d_ff, dropout)
+</span></span><span style="display:flex;"><span>                                     <span style="color:#66d9ef">for</span> _ <span style="color:#f92672">in</span> range(num_layers)])
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, x, encoder_output, src_mask, tgt_mask):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> layer <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>layers:
+</span></span><span style="display:flex;"><span>            x <span style="color:#f92672">=</span> layer(x, encoder_output, src_mask, tgt_mask)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> x
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Transformer</span>(nn<span style="color:#f92672">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, src_vocab_size, tgt_vocab_size, num_layers, d_model, num_heads, d_ff, dropout<span style="color:#f92672">=</span><span style="color:#ae81ff">0.1</span>):
+</span></span><span style="display:flex;"><span>        super(Transformer, self)<span style="color:#f92672">.</span>__init__()
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>embedding <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Embedding(src_vocab_size, d_model) <span style="color:#75715e"># Source language embedding</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>pos_encoder <span style="color:#f92672">=</span> PositionalEncoding(d_model, dropout) <span style="color:#75715e"># Assuming PositionalEncoding is defined</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>encoder <span style="color:#f92672">=</span> Encoder(num_layers, d_model, num_heads, d_ff, dropout)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>decoder <span style="color:#f92672">=</span> Decoder(num_layers, d_model, num_heads, d_ff, dropout)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>linear <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Linear(d_model, tgt_vocab_size) <span style="color:#75715e"># Output linear layer</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>softmax <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>LogSoftmax(dim<span style="color:#f92672">=-</span><span style="color:#ae81ff">1</span>) <span style="color:#75715e"># Apply softmax for probability distribution</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, src, tgt, src_mask, tgt_mask):
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Embed and add positional encoding to source and target sequences</span>
+</span></span><span style="display:flex;"><span>        src_embedded <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>pos_encoder(self<span style="color:#f92672">.</span>embedding(src))
+</span></span><span style="display:flex;"><span>        tgt_embedded <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>pos_encoder(self<span style="color:#f92672">.</span>embedding(tgt))
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Encode the source sequence</span>
+</span></span><span style="display:flex;"><span>        encoder_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>encoder(src_embedded, src_mask)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Decode the target sequence</span>
+</span></span><span style="display:flex;"><span>        decoder_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>decoder(tgt_embedded, encoder_output, src_mask, tgt_mask)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Pass the decoder output through the linear layer and softmax</span>
+</span></span><span style="display:flex;"><span>        output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>softmax(self<span style="color:#f92672">.</span>linear(decoder_output))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> output
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> torch.optim <span style="color:#66d9ef">as</span> optim
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> numpy <span style="color:#66d9ef">as</span> np
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Define sequence length and vocabulary size</span>
+</span></span><span style="display:flex;"><span>sequence_length <span style="color:#f92672">=</span> <span style="color:#ae81ff">10</span>
+</span></span><span style="display:flex;"><span>vocab_size <span style="color:#f92672">=</span> <span style="color:#ae81ff">20</span>  <span style="color:#75715e"># Numbers from 0 to 19</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Function to generate a random sequence</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">generate_sequence</span>(length, vocab):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> torch<span style="color:#f92672">.</span>randint(<span style="color:#ae81ff">0</span>, vocab, (length,))
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Function to reverse a sequence</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">reverse_sequence</span>(sequence):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> torch<span style="color:#f92672">.</span>flip(sequence, dims<span style="color:#f92672">=</span>[<span style="color:#ae81ff">0</span>])
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Generate training data</span>
+</span></span><span style="display:flex;"><span>num_samples <span style="color:#f92672">=</span> <span style="color:#ae81ff">1000</span>
+</span></span><span style="display:flex;"><span>train_data <span style="color:#f92672">=</span> []
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> _ <span style="color:#f92672">in</span> range(num_samples):
+</span></span><span style="display:flex;"><span>    src_sequence <span style="color:#f92672">=</span> generate_sequence(sequence_length, vocab_size)
+</span></span><span style="display:flex;"><span>    tgt_sequence <span style="color:#f92672">=</span> reverse_sequence(src_sequence)
+</span></span><span style="display:flex;"><span>    train_data<span style="color:#f92672">.</span>append((src_sequence, tgt_sequence))
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Example of a training sample</span>
+</span></span><span style="display:flex;"><span>src_sequence, tgt_sequence <span style="color:#f92672">=</span> train_data[<span style="color:#ae81ff">0</span>]
+</span></span><span style="display:flex;"><span>print(<span style="color:#e6db74">&#34;Source Sequence:&#34;</span>, src_sequence)
+</span></span><span style="display:flex;"><span>print(<span style="color:#e6db74">&#34;Target Sequence:&#34;</span>, tgt_sequence)
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> torch.utils.data <span style="color:#f92672">import</span> DataLoader, Dataset
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Define a custom dataset class</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">SequenceDataset</span>(Dataset):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, data):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>data <span style="color:#f92672">=</span> data
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __len__(self):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> len(self<span style="color:#f92672">.</span>data)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __getitem__(self, idx):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>data[idx]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create the dataset</span>
+</span></span><span style="display:flex;"><span>train_dataset <span style="color:#f92672">=</span> SequenceDataset(train_data)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Define batch size</span>
+</span></span><span style="display:flex;"><span>batch_size <span style="color:#f92672">=</span> <span style="color:#ae81ff">32</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create the data loader</span>
+</span></span><span style="display:flex;"><span>train_dataloader <span style="color:#f92672">=</span> DataLoader(train_dataset, batch_size<span style="color:#f92672">=</span>batch_size, shuffle<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Example of a batch</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> src_batch, tgt_batch <span style="color:#f92672">in</span> train_dataloader:
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">&#34;Source Batch Shape:&#34;</span>, src_batch<span style="color:#f92672">.</span>shape)
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">&#34;Target Batch Shape:&#34;</span>, tgt_batch<span style="color:#f92672">.</span>shape)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">break</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Model parameters</span>
+</span></span><span style="display:flex;"><span>embedding_dim <span style="color:#f92672">=</span> <span style="color:#ae81ff">64</span>  <span style="color:#75715e"># Dimension of the word embeddings</span>
+</span></span><span style="display:flex;"><span>num_heads <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>       <span style="color:#75715e"># Number of attention heads</span>
+</span></span><span style="display:flex;"><span>num_layers <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>      <span style="color:#75715e"># Number of encoder/decoder layers</span>
+</span></span><span style="display:flex;"><span>dropout <span style="color:#f92672">=</span> <span style="color:#ae81ff">0.1</span>       <span style="color:#75715e"># Dropout probability</span>
+</span></span><span style="display:flex;"><span>max_seq_length <span style="color:#f92672">=</span> sequence_length <span style="color:#75715e"># Maximum sequence length for positional encoding</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Instantiate the Transformer model</span>
+</span></span><span style="display:flex;"><span>model <span style="color:#f92672">=</span> Transformer(
+</span></span><span style="display:flex;"><span>    src_vocab_size<span style="color:#f92672">=</span>vocab_size,
+</span></span><span style="display:flex;"><span>    tgt_vocab_size<span style="color:#f92672">=</span>vocab_size,
+</span></span><span style="display:flex;"><span>    num_layers<span style="color:#f92672">=</span>num_layers,
+</span></span><span style="display:flex;"><span>    d_model<span style="color:#f92672">=</span>embedding_dim,
+</span></span><span style="display:flex;"><span>    num_heads<span style="color:#f92672">=</span>num_heads,
+</span></span><span style="display:flex;"><span>    d_ff<span style="color:#f92672">=</span><span style="color:#ae81ff">2048</span>,  <span style="color:#75715e"># 这里添加了 d_ff 参数，可根据需要调整</span>
+</span></span><span style="display:flex;"><span>    dropout<span style="color:#f92672">=</span>dropout
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Print the model architecture (optional)</span>
+</span></span><span style="display:flex;"><span>print(model)
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Define the loss function (Cross-Entropy Loss)</span>
+</span></span><span style="display:flex;"><span>loss_function <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>CrossEntropyLoss()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Define the optimizer (Adam)</span>
+</span></span><span style="display:flex;"><span>optimizer <span style="color:#f92672">=</span> optim<span style="color:#f92672">.</span>Adam(model<span style="color:#f92672">.</span>parameters(), lr<span style="color:#f92672">=</span><span style="color:#ae81ff">0.001</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Move the model to the appropriate device (CPU or GPU)</span>
+</span></span><span style="display:flex;"><span>device <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>device(<span style="color:#e6db74">&#34;cuda&#34;</span> <span style="color:#66d9ef">if</span> torch<span style="color:#f92672">.</span>cuda<span style="color:#f92672">.</span>is_available() <span style="color:#66d9ef">else</span> <span style="color:#e6db74">&#34;cpu&#34;</span>)
+</span></span><span style="display:flex;"><span>model <span style="color:#f92672">=</span> model<span style="color:#f92672">.</span>to(device)
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Number of epochs</span>
+</span></span><span style="display:flex;"><span>num_epochs <span style="color:#f92672">=</span> <span style="color:#ae81ff">5000</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Training loop</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> epoch <span style="color:#f92672">in</span> range(num_epochs):
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">.</span>train()  <span style="color:#75715e"># Set the model to training mode</span>
+</span></span><span style="display:flex;"><span>    total_loss <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> src_batch, tgt_batch <span style="color:#f92672">in</span> train_dataloader:
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Move data to the device</span>
+</span></span><span style="display:flex;"><span>        src_batch <span style="color:#f92672">=</span> src_batch<span style="color:#f92672">.</span>to(device)
+</span></span><span style="display:flex;"><span>        tgt_batch <span style="color:#f92672">=</span> tgt_batch<span style="color:#f92672">.</span>to(device)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Generate masks</span>
+</span></span><span style="display:flex;"><span>        src_mask <span style="color:#f92672">=</span> (src_batch <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0</span>)<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">1</span>)<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">2</span>)  <span style="color:#75715e"># Assume 0 is the padding token</span>
+</span></span><span style="display:flex;"><span>        tgt_mask <span style="color:#f92672">=</span> (tgt_batch[:, :<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>] <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0</span>)<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">1</span>)<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Zero the gradients</span>
+</span></span><span style="display:flex;"><span>        optimizer<span style="color:#f92672">.</span>zero_grad()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Forward pass</span>
+</span></span><span style="display:flex;"><span>        output <span style="color:#f92672">=</span> model(src_batch, tgt_batch[:, :<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>], src_mask, tgt_mask)  <span style="color:#75715e"># Shift right the target sequence</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Reshape the output and target to compute the loss</span>
+</span></span><span style="display:flex;"><span>        output <span style="color:#f92672">=</span> output<span style="color:#f92672">.</span>reshape(<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>, vocab_size)
+</span></span><span style="display:flex;"><span>        tgt <span style="color:#f92672">=</span> tgt_batch[:, <span style="color:#ae81ff">1</span>:]<span style="color:#f92672">.</span>reshape(<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>) <span style="color:#75715e"># Shift left the target sequence</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Calculate the loss</span>
+</span></span><span style="display:flex;"><span>        loss <span style="color:#f92672">=</span> loss_function(output, tgt)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Backward pass and optimization</span>
+</span></span><span style="display:flex;"><span>        loss<span style="color:#f92672">.</span>backward()
+</span></span><span style="display:flex;"><span>        optimizer<span style="color:#f92672">.</span>step()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        total_loss <span style="color:#f92672">+=</span> loss<span style="color:#f92672">.</span>item()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Print the average loss for the epoch</span>
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Epoch </span><span style="color:#e6db74">{</span>epoch<span style="color:#f92672">+</span><span style="color:#ae81ff">1</span><span style="color:#e6db74">}</span><span style="color:#e6db74">/</span><span style="color:#e6db74">{</span>num_epochs<span style="color:#e6db74">}</span><span style="color:#e6db74">, Loss: </span><span style="color:#e6db74">{</span>total_loss<span style="color:#f92672">/</span>len(train_dataloader)<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Generate a test sequence</span>
+</span></span><span style="display:flex;"><span>test_sequence <span style="color:#f92672">=</span> generate_sequence(sequence_length, vocab_size)<span style="color:#f92672">.</span>to(device)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Add a batch dimension</span>
+</span></span><span style="display:flex;"><span>test_sequence <span style="color:#f92672">=</span> test_sequence<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Generate start token</span>
+</span></span><span style="display:flex;"><span>start_token <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>tensor([[<span style="color:#ae81ff">0</span>]])<span style="color:#f92672">.</span>to(device) <span style="color:#75715e"># Assuming 0 is the start token</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Initialize the output sequence with the start token</span>
+</span></span><span style="display:flex;"><span>output_sequence <span style="color:#f92672">=</span> start_token
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Generate masks</span>
+</span></span><span style="display:flex;"><span>src_mask <span style="color:#f92672">=</span> (test_sequence <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0</span>)<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">1</span>)<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>tgt_mask <span style="color:#f92672">=</span> (output_sequence <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0</span>)<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">1</span>)<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">2</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Autoregressive generation</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">with</span> torch<span style="color:#f92672">.</span>no_grad(): <span style="color:#75715e"># Disable gradient calculation</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> _ <span style="color:#f92672">in</span> range(sequence_length):
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Pass the input sequence and the current output sequence to the model</span>
+</span></span><span style="display:flex;"><span>        output <span style="color:#f92672">=</span> model(test_sequence, output_sequence, src_mask, tgt_mask)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Get the last predicted token</span>
+</span></span><span style="display:flex;"><span>        predicted_token <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>argmax(output[:, <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>, :], dim<span style="color:#f92672">=-</span><span style="color:#ae81ff">1</span>)<span style="color:#f92672">.</span>unsqueeze(<span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Append the predicted token to the output sequence</span>
+</span></span><span style="display:flex;"><span>        output_sequence <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>cat((output_sequence, predicted_token), dim<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Remove the start token</span>
+</span></span><span style="display:flex;"><span>output_sequence <span style="color:#f92672">=</span> output_sequence[:, <span style="color:#ae81ff">1</span>:]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Print the results</span>
+</span></span><span style="display:flex;"><span>print(<span style="color:#e6db74">&#34;Input Sequence:&#34;</span>, test_sequence<span style="color:#f92672">.</span>squeeze())
+</span></span><span style="display:flex;"><span>print(<span style="color:#e6db74">&#34;Predicted Sequence:&#34;</span>, output_sequence<span style="color:#f92672">.</span>squeeze())
+</span></span><span style="display:flex;"><span>print(<span style="color:#e6db74">&#34;Target Sequence:&#34;</span>, reverse_sequence(test_sequence<span style="color:#f92672">.</span>squeeze()))
+</span></span></code></pre></div>
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+      <li><a href="/tags/%E6%8A%80%E6%9C%AF/">技术</a></li>
+    </ul>
+<nav class="paginav">
+  <a class="prev" href="/posts/macos&#43;hugo&#43;%E9%98%BF%E9%87%8C%E4%BA%91%E6%90%AD%E5%BB%BA%E4%B8%AA%E4%BA%BA%E5%8D%9A%E5%AE%A2/">
+    <span class="title">« Prev</span>
+    <br>
+    <span>MacOS&#43;Hugo&#43;阿里云｜搭建个人网站</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="/">MekeyPan</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+</body>
+
+</html>

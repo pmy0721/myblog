@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>技术 on MekeyPan</title>
+    <link>/tags/%E6%8A%80%E6%9C%AF/</link>
+    <description>Recent content in 技术 on MekeyPan</description>
+    <generator>Hugo -- 0.144.2</generator>
+    <language>en-us</language>
+    <lastBuildDate>Thu, 01 Jan 2026 16:16:56 +0800</lastBuildDate>
+    <atom:link href="/tags/%E6%8A%80%E6%9C%AF/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>2026｜所愿皆成真</title>
+      <link>/posts/2026%E6%89%80%E6%84%BF%E7%9A%86%E6%88%90%E7%9C%9F/</link>
+      <pubDate>Thu, 01 Jan 2026 16:16:56 +0800</pubDate>
+      <guid>/posts/2026%E6%89%80%E6%84%BF%E7%9A%86%E6%88%90%E7%9C%9F/</guid>
+      <description></description>
+    </item>
+    <item>
+      <title>大模型相关内容汇总｜AI笔记</title>
+      <link>/posts/%E5%A4%A7%E6%A8%A1%E5%9E%8B%E7%9B%B8%E5%85%B3%E5%86%85%E5%AE%B9%E6%B1%87%E6%80%BBai%E7%AC%94%E8%AE%B0/</link>
+      <pubDate>Thu, 27 Nov 2025 16:47:01 +0800</pubDate>
+      <guid>/posts/%E5%A4%A7%E6%A8%A1%E5%9E%8B%E7%9B%B8%E5%85%B3%E5%86%85%E5%AE%B9%E6%B1%87%E6%80%BBai%E7%AC%94%E8%AE%B0/</guid>
+      <description>&lt;p&gt;&lt;a href=&#34;https://namtrd46zox.feishu.cn/wiki/NP8KwWGgcibCuJkgGKucBXZcnUb?from=from_copylink&#34;&gt;《大模型相关内容汇总｜AI笔记》&lt;/a&gt;&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Function Calling详解｜AI笔记</title>
+      <link>/posts/function-calling%E8%AF%A6%E8%A7%A3ai%E7%AC%94%E8%AE%B0/</link>
+      <pubDate>Fri, 17 Oct 2025 09:16:00 +0800</pubDate>
+      <guid>/posts/function-calling%E8%AF%A6%E8%A7%A3ai%E7%AC%94%E8%AE%B0/</guid>
+      <description>&lt;p&gt;&lt;a href=&#34;https://namtrd46zox.feishu.cn/docx/YMzhdpKC4oa9mBxqy0Uc5yKMn8c?from=from_copylink&#34;&gt;《Function Calling详解｜AI笔记》&lt;/a&gt;&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>大模型微调详解｜AI笔记</title>
+      <link>/posts/%E5%A4%A7%E6%A8%A1%E5%9E%8B%E5%BE%AE%E8%B0%83%E8%AF%A6%E8%A7%A3ai%E7%AC%94%E8%AE%B0/</link>
+      <pubDate>Mon, 13 Oct 2025 16:09:00 +0800</pubDate>
+      <guid>/posts/%E5%A4%A7%E6%A8%A1%E5%9E%8B%E5%BE%AE%E8%B0%83%E8%AF%A6%E8%A7%A3ai%E7%AC%94%E8%AE%B0/</guid>
+      <description>&lt;p&gt;&lt;a href=&#34;https://namtrd46zox.feishu.cn/docx/Ssqpd9MtSo7PhPxlpo6crAmxnFc?from=from_copylink&#34;&gt;《大模型微调详解｜AI笔记》&lt;/a&gt;&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>RLHF详解｜AI笔记</title>
+      <link>/posts/rlhf%E8%AF%A6%E8%A7%A3ai%E7%AC%94%E8%AE%B0/</link>
+      <pubDate>Sun, 12 Oct 2025 09:18:00 +0800</pubDate>
+      <guid>/posts/rlhf%E8%AF%A6%E8%A7%A3ai%E7%AC%94%E8%AE%B0/</guid>
+      <description>&lt;p&gt;&lt;a href=&#34;https://namtrd46zox.feishu.cn/docx/RgvAdOk3EoU62TxkOf0chmJknae?from=from_copylink&#34;&gt;《RLHF详解｜AI笔记》&lt;/a&gt;&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>大模型训练详解｜AI笔记</title>
+      <link>/posts/%E5%A4%A7%E6%A8%A1%E5%9E%8B%E8%AE%AD%E7%BB%83%E8%AF%A6%E8%A7%A3ai%E7%AC%94%E8%AE%B0/</link>
+      <pubDate>Thu, 09 Oct 2025 08:36:18 +0800</pubDate>
+      <guid>/posts/%E5%A4%A7%E6%A8%A1%E5%9E%8B%E8%AE%AD%E7%BB%83%E8%AF%A6%E8%A7%A3ai%E7%AC%94%E8%AE%B0/</guid>
+      <description>&lt;p&gt;&lt;a href=&#34;https://namtrd46zox.feishu.cn/docx/H1wzd97pxo0f9HxMmaHcKYkvnnd?from=from_copylink&#34;&gt;《大模型训练详解｜AI笔记》&lt;/a&gt;&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>注意力机制详解｜AI笔记</title>
+      <link>/posts/%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%9C%BA%E5%88%B6%E8%AF%A6%E8%A7%A3ai%E7%AC%94%E8%AE%B0/</link>
+      <pubDate>Tue, 07 Oct 2025 19:26:06 +0800</pubDate>
+      <guid>/posts/%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%9C%BA%E5%88%B6%E8%AF%A6%E8%A7%A3ai%E7%AC%94%E8%AE%B0/</guid>
+      <description>&lt;p&gt;&lt;a href=&#34;https://namtrd46zox.feishu.cn/docx/WY4Pdl7odoeRIrxLHJxc7VQqnqg?from=from_copylink&#34;&gt;《注意力机制详解｜AI笔记》&lt;/a&gt;&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Pytorch实现基本的Transformer网络架构｜AI之路</title>
+      <link>/posts/pytorch%E5%AE%9E%E7%8E%B0%E5%9F%BA%E6%9C%AC%E7%9A%84transformer%E7%BD%91%E7%BB%9C%E6%9E%B6%E6%9E%84ai%E4%B9%8B%E8%B7%AF/</link>
+      <pubDate>Sun, 06 Apr 2025 10:02:42 +0800</pubDate>
+      <guid>/posts/pytorch%E5%AE%9E%E7%8E%B0%E5%9F%BA%E6%9C%AC%E7%9A%84transformer%E7%BD%91%E7%BB%9C%E6%9E%B6%E6%9E%84ai%E4%B9%8B%E8%B7%AF/</guid>
+      <description>&lt;blockquote&gt;
+&lt;p&gt;📚学习资源： &lt;br&gt;
+1.Road Map &lt;a href=&#34;https://roadmap.sh/ai&#34;&gt;AI tutor&lt;/a&gt; &lt;br&gt;
+2.从零开始实现Transformer(模型搭建+数据处理+训练流程) &lt;a href=&#34;https://zhuanlan.zhihu.com/p/651736596&#34;&gt;知乎&lt;/a&gt;&lt;/p&gt;&lt;/blockquote&gt;
+&lt;blockquote&gt;
+&lt;p&gt;🔧代码优化工具：&lt;br&gt;
+豆包&lt;/p&gt;&lt;/blockquote&gt;
+&lt;hr&gt;
+&lt;p&gt;&lt;a href=&#34;https://www.kaggle.com/code/mikeypan0721/transformer-zh-en&#34;&gt;Kaggle Notebook&lt;/a&gt;&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>MacOS&#43;Hugo&#43;阿里云｜搭建个人网站</title>
+      <link>/posts/macos&#43;hugo&#43;%E9%98%BF%E9%87%8C%E4%BA%91%E6%90%AD%E5%BB%BA%E4%B8%AA%E4%BA%BA%E5%8D%9A%E5%AE%A2/</link>
+      <pubDate>Thu, 06 Mar 2025 12:00:03 +0000</pubDate>
+      <guid>/posts/macos&#43;hugo&#43;%E9%98%BF%E9%87%8C%E4%BA%91%E6%90%AD%E5%BB%BA%E4%B8%AA%E4%BA%BA%E5%8D%9A%E5%AE%A2/</guid>
+      <description>&lt;blockquote&gt;
+&lt;p&gt;💻设备信息：&lt;br&gt;
+MacBook Air M3&lt;/p&gt;&lt;/blockquote&gt;
+&lt;hr&gt;
+&lt;h2 id=&#34;安装homebrew&#34;&gt;安装&lt;a href=&#34;https://brew.sh/zh-cn/&#34;&gt;Homebrew&lt;/a&gt;&lt;/h2&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Homebrew 是一款专门为macOS设计的开源软件包管理工具&lt;/p&gt;&lt;/blockquote&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;下载最新的 &lt;a href=&#34;https://github.com/Homebrew/brew/releases&#34;&gt;GitHub 发行版&lt;/a&gt; 安装包，并进行安装&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;设置环境变量，打开终端输入如下：&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;&#34;&gt;&lt;code class=&#34;language-bash&#34; data-lang=&#34;bash&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;echo &lt;span style=&#34;color:#e6db74&#34;&gt;&amp;#39;eval &amp;#34;$(/opt/homebrew/bin/brew shellenv)&amp;#34; #brew.idayer.com&amp;#39;&lt;/span&gt; &amp;gt;&amp;gt; ~/.zprofile
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;eval &lt;span style=&#34;color:#e6db74&#34;&gt;&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#66d9ef&#34;&gt;$(&lt;/span&gt;/opt/homebrew/bin/brew shellenv&lt;span style=&#34;color:#66d9ef&#34;&gt;)&lt;/span&gt;&lt;span style=&#34;color:#e6db74&#34;&gt;&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;参考自 &lt;a href=&#34;https://brew.idayer.com/guide/m1/&#34;&gt;Homebrew 中文网&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;验证安装完毕&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;&#34;&gt;&lt;code class=&#34;language-bash&#34; data-lang=&#34;bash&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;brew --version
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id=&#34;安装hugo&#34;&gt;安装&lt;a href=&#34;https://gohugo.io/&#34;&gt;Hugo&lt;/a&gt;&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;使用 &lt;code&gt;brew&lt;/code&gt; 下载Hugo相关文件&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;&#34;&gt;&lt;code class=&#34;language-bash&#34; data-lang=&#34;bash&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;brew install hugo
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;创建博客文件夹（站点）&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;&#34;&gt;&lt;code class=&#34;language-bash&#34; data-lang=&#34;bash&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;hugo new site myblog --format yaml
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;下载 &lt;a href=&#34;https://github.com/adityatelange/hugo-PaperMod&#34;&gt;PaperMod&lt;/a&gt; 主题&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;&#34;&gt;&lt;code class=&#34;language-bash&#34; data-lang=&#34;bash&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;cd myblog
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;git clone https://github.com/adityatelange/hugo-PaperMod themes/PaperMod --depth&lt;span style=&#34;color:#f92672&#34;&gt;=&lt;/span&gt;&lt;span style=&#34;color:#ae81ff&#34;&gt;1&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;cd themes/PaperMod
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;git pull
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;打开 &lt;code&gt;myblog&lt;/code&gt; 文件夹下的 &lt;code&gt;hugo.yaml&lt;/code&gt;，添加：&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;&#34;&gt;&lt;code class=&#34;language-yaml&#34; data-lang=&#34;yaml&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#f92672&#34;&gt;theme&lt;/span&gt;: [&lt;span style=&#34;color:#e6db74&#34;&gt;&amp;#34;PaperMod&amp;#34;&lt;/span&gt;]
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;创建新文章&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;&#34;&gt;&lt;code class=&#34;language-bash&#34; data-lang=&#34;bash&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;hugo new posts/first-blog.md
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;本地浏览，地址为： &lt;a href=&#34;http://localhost:1313/&#34;&gt;http://localhost:1313/&lt;/a&gt;&lt;/p&gt;</description>
+    </item>
+  </channel>
+</rss>
