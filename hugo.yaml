@@ -25,7 +25,7 @@ params:
   profileMode:
     enabled: true
     title: "<Title>" # optional default will be site title
-    subtitle: "华为｜算力与AI｜大模型练习生"
+    subtitle: "Use joy as a compass."
     imageUrl: "https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/00805c7fd02ca6bc410e08506a48899b.PNG" # optional
     imageTitle: "This is MekeyPan" # optional
     imageWidth: 225 # custom size

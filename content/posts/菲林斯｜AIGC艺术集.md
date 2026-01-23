@@ -1,5 +1,5 @@
 ---
-title: "菲林斯｜Flins"
+title: "菲林斯｜AIGC艺术集"
 date: 2025-10-02T08:42:02+08:00
 # weight: 1
 # aliases: ["/first"]
