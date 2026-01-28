@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>DeepSeek OCR 2 创新点与技术细节｜AI笔记 | MekeyPan</title>
+<meta name="keywords" content="技术, 多模态, 大模型, DeepSeek">
+<meta name="description" content="
+DeepSeek-OCR 2 的核心升级是用 LLM-style 视觉编码器 &#43; 因果流（causal flow）查询 token 在编码阶段学到更接近人类阅读顺序的表示，在 相近/更小的视觉 token 预算下把 OmniDocBench v1.5 的整体指标从 87.36 提升到 91.09（&#43;3.73）。
+这篇笔记聚焦 DeepSeek OCR 2 的方法动机与关键机制，尤其是“编码器端重排阅读顺序 &#43; 解码器端保持高效自回归”的级联因果结构。
+贡献点
+
+DeepEncoder V2：用“LLM 作为视觉编码器”替换 DeepEncoder 里的 CLIP ViT，目的是让编码器具备更贴近人类阅读的“因果视觉流”。（引言贡献点 (1)，图 1）
+引入“因果流查询 token（causal flow tokens）”并用定制 attention mask：视觉 token 仍是双向全局注意力，但查询 token 走因果注意力，可逐步吸收视觉信息并形成“新阅读顺序”。（引言贡献点 (2)，方法 3.2.2 &#43; 图 5 &#43; 式 (1)）
+保持查询 token 与视觉 token 等势（等数量），并且 只把查询 token（编码器输出后半段）喂给解码器，形成“编码器先重排、解码器再自回归推理”的级联因果结构。（引言贡献点 (3)(4)）
+在不牺牲 token 压缩比/解码效率的前提下提高性能：把喂给 LLM 的视觉 token 预算约束在 256–1120（下限对齐 DeepSeek-OCR 的 1024^2 tokenization，上限对齐 Gemini-3 Pro token budget）。
+实证：OmniDocBench v1.5 上整体 &#43;3.73，阅读顺序 ED 从 0.085 降到 0.057，并在生产环境用 repetition rate 观测到质量提升。
+
+
+问题定义与假设
+
+输入：文档图像（多分辨率、多布局；方法中明确有 1024×1024 global view &#43; 768×768 local crops）
+输出：面向“文档阅读/解析”的文本与结构化内容（论文用 OmniDocBench 的多指标来衡量文本、公式、表格、阅读顺序）
+关键约束：
+
+token 预算：喂给解码器的（重排后）视觉 token 总数在 [256, 1120]，通过 0–6 个 local crops 控制
+可比性假设：训练数据源“基本一致”，仅做了轻量数据采样/标签合并，因此把 DeepSeek-OCR 视为有效 baseline
+
+
+隐含假设（论文动机）：
+
+固定 raster-scan &#43; 固定位置编码会引入不合理归纳偏置；文档这种强结构视觉逻辑更需要“因果阅读流”
+
+
+
+
+方法细读
+模块 -&gt; 目的 -&gt; 关键公式/伪代码 -&gt; 复杂度/实现细节 &#43; 逐段证据
+总体架构：Encoder（DeepEncoder V2）&#43; Decoder（DeepSeek-MoE）
+
+目标：在 encoder 端就完成 token 压缩 &#43; token 重排（阅读顺序建模），decoder 侧保持 DeepSeek-OCR 的高效 MoE 解码。
+证据：明确“主要聚焦 encoder，不升级 decoder，保留 DeepSeek-OCR 的 3B MoE（~500M active）”。
+
+
+视觉 tokenizer（图像→视觉 token）
+
+做法：沿用 DeepEncoder 的 tokenizer：80M 参数 SAM-base &#43; 2 个卷积层；并把最后卷积层维度从 1024 改到 896 以对齐后续流水，采用的方法为 token compression 16×。
+目的：在进入“全局注意力的 LM-style encoder”前就把 token 数压到可控规模，降低计算/显存。
+
+
+LM 作为 Vision Encoder：双流注意力 &#43; 前缀拼接（核心创新）
+
+Dual-stream attention（双流注意力）：同一 transformer 序列里，前半段视觉 token 用双向注意力；后半段查询 token 用因果注意力。
+Causal flow queries / tokens（因果流查询 token）：可学习的查询向量序列，用来“按因果顺序”聚合视觉 token，并隐式学出阅读顺序。
+
+关键机制：">
+<meta name="author" content="Me">
+<link rel="canonical" href="/posts/deepseek-ocr-2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.45e028aa8ce0961349adf411b013ee39406be2c0bc80d4ea3fc04555f7f4611a.css" integrity="sha256-ReAoqozglhNJrfQRsBPuOUBr4sC8gNTqP8BFVff0YRo=" rel="preload stylesheet" as="style">
+<link rel="icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="mask-icon" href="/safari-pinned-tab.svg">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="en" href="/posts/deepseek-ocr-2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+    <style>
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --theme: rgb(29, 30, 32);
+                --entry: rgb(46, 46, 51);
+                --primary: rgb(218, 218, 219);
+                --secondary: rgb(155, 156, 157);
+                --tertiary: rgb(65, 66, 68);
+                --content: rgb(196, 196, 197);
+                --code-block-bg: rgb(46, 46, 51);
+                --code-bg: rgb(55, 56, 62);
+                --border: rgb(51, 51, 51);
+            }
+
+            .list {
+                background: var(--theme);
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-track {
+                background: 0 0;
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-thumb {
+                border-color: var(--theme);
+            }
+        }
+
+    </style>
+</noscript><meta property="og:url" content="/posts/deepseek-ocr-2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/">
+  <meta property="og:site_name" content="MekeyPan">
+  <meta property="og:title" content="DeepSeek OCR 2 创新点与技术细节｜AI笔记">
+  <meta property="og:description" content=" DeepSeek-OCR 2 的核心升级是用 LLM-style 视觉编码器 &#43; 因果流（causal flow）查询 token 在编码阶段学到更接近人类阅读顺序的表示，在 相近/更小的视觉 token 预算下把 OmniDocBench v1.5 的整体指标从 87.36 提升到 91.09（&#43;3.73）。
+这篇笔记聚焦 DeepSeek OCR 2 的方法动机与关键机制，尤其是“编码器端重排阅读顺序 &#43; 解码器端保持高效自回归”的级联因果结构。
+贡献点 DeepEncoder V2：用“LLM 作为视觉编码器”替换 DeepEncoder 里的 CLIP ViT，目的是让编码器具备更贴近人类阅读的“因果视觉流”。（引言贡献点 (1)，图 1） 引入“因果流查询 token（causal flow tokens）”并用定制 attention mask：视觉 token 仍是双向全局注意力，但查询 token 走因果注意力，可逐步吸收视觉信息并形成“新阅读顺序”。（引言贡献点 (2)，方法 3.2.2 &#43; 图 5 &#43; 式 (1)） 保持查询 token 与视觉 token 等势（等数量），并且 只把查询 token（编码器输出后半段）喂给解码器，形成“编码器先重排、解码器再自回归推理”的级联因果结构。（引言贡献点 (3)(4)） 在不牺牲 token 压缩比/解码效率的前提下提高性能：把喂给 LLM 的视觉 token 预算约束在 256–1120（下限对齐 DeepSeek-OCR 的 1024^2 tokenization，上限对齐 Gemini-3 Pro token budget）。 实证：OmniDocBench v1.5 上整体 &#43;3.73，阅读顺序 ED 从 0.085 降到 0.057，并在生产环境用 repetition rate 观测到质量提升。 问题定义与假设 输入：文档图像（多分辨率、多布局；方法中明确有 1024×1024 global view &#43; 768×768 local crops） 输出：面向“文档阅读/解析”的文本与结构化内容（论文用 OmniDocBench 的多指标来衡量文本、公式、表格、阅读顺序） 关键约束： token 预算：喂给解码器的（重排后）视觉 token 总数在 [256, 1120]，通过 0–6 个 local crops 控制 可比性假设：训练数据源“基本一致”，仅做了轻量数据采样/标签合并，因此把 DeepSeek-OCR 视为有效 baseline 隐含假设（论文动机）： 固定 raster-scan &#43; 固定位置编码会引入不合理归纳偏置；文档这种强结构视觉逻辑更需要“因果阅读流” 方法细读 模块 -&gt; 目的 -&gt; 关键公式/伪代码 -&gt; 复杂度/实现细节 &#43; 逐段证据 总体架构：Encoder（DeepEncoder V2）&#43; Decoder（DeepSeek-MoE） 目标：在 encoder 端就完成 token 压缩 &#43; token 重排（阅读顺序建模），decoder 侧保持 DeepSeek-OCR 的高效 MoE 解码。 证据：明确“主要聚焦 encoder，不升级 decoder，保留 DeepSeek-OCR 的 3B MoE（~500M active）”。 视觉 tokenizer（图像→视觉 token） 做法：沿用 DeepEncoder 的 tokenizer：80M 参数 SAM-base &#43; 2 个卷积层；并把最后卷积层维度从 1024 改到 896 以对齐后续流水，采用的方法为 token compression 16×。 目的：在进入“全局注意力的 LM-style encoder”前就把 token 数压到可控规模，降低计算/显存。 LM 作为 Vision Encoder：双流注意力 &#43; 前缀拼接（核心创新） Dual-stream attention（双流注意力）：同一 transformer 序列里，前半段视觉 token 用双向注意力；后半段查询 token 用因果注意力。 Causal flow queries / tokens（因果流查询 token）：可学习的查询向量序列，用来“按因果顺序”聚合视觉 token，并隐式学出阅读顺序。 关键机制：">
+  <meta property="og:locale" content="en-us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="posts">
+    <meta property="article:published_time" content="2026-01-27T17:22:25+08:00">
+    <meta property="article:modified_time" content="2026-01-27T17:22:25+08:00">
+    <meta property="article:tag" content="技术">
+    <meta property="article:tag" content="多模态">
+    <meta property="article:tag" content="大模型">
+    <meta property="article:tag" content="DeepSeek">
+    <meta property="og:image" content="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image2026127.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image2026127.png">
+<meta name="twitter:title" content="DeepSeek OCR 2 创新点与技术细节｜AI笔记">
+<meta name="twitter:description" content="
+DeepSeek-OCR 2 的核心升级是用 LLM-style 视觉编码器 &#43; 因果流（causal flow）查询 token 在编码阶段学到更接近人类阅读顺序的表示，在 相近/更小的视觉 token 预算下把 OmniDocBench v1.5 的整体指标从 87.36 提升到 91.09（&#43;3.73）。
+这篇笔记聚焦 DeepSeek OCR 2 的方法动机与关键机制，尤其是“编码器端重排阅读顺序 &#43; 解码器端保持高效自回归”的级联因果结构。
+贡献点
+
+DeepEncoder V2：用“LLM 作为视觉编码器”替换 DeepEncoder 里的 CLIP ViT，目的是让编码器具备更贴近人类阅读的“因果视觉流”。（引言贡献点 (1)，图 1）
+引入“因果流查询 token（causal flow tokens）”并用定制 attention mask：视觉 token 仍是双向全局注意力，但查询 token 走因果注意力，可逐步吸收视觉信息并形成“新阅读顺序”。（引言贡献点 (2)，方法 3.2.2 &#43; 图 5 &#43; 式 (1)）
+保持查询 token 与视觉 token 等势（等数量），并且 只把查询 token（编码器输出后半段）喂给解码器，形成“编码器先重排、解码器再自回归推理”的级联因果结构。（引言贡献点 (3)(4)）
+在不牺牲 token 压缩比/解码效率的前提下提高性能：把喂给 LLM 的视觉 token 预算约束在 256–1120（下限对齐 DeepSeek-OCR 的 1024^2 tokenization，上限对齐 Gemini-3 Pro token budget）。
+实证：OmniDocBench v1.5 上整体 &#43;3.73，阅读顺序 ED 从 0.085 降到 0.057，并在生产环境用 repetition rate 观测到质量提升。
+
+
+问题定义与假设
+
+输入：文档图像（多分辨率、多布局；方法中明确有 1024×1024 global view &#43; 768×768 local crops）
+输出：面向“文档阅读/解析”的文本与结构化内容（论文用 OmniDocBench 的多指标来衡量文本、公式、表格、阅读顺序）
+关键约束：
+
+token 预算：喂给解码器的（重排后）视觉 token 总数在 [256, 1120]，通过 0–6 个 local crops 控制
+可比性假设：训练数据源“基本一致”，仅做了轻量数据采样/标签合并，因此把 DeepSeek-OCR 视为有效 baseline
+
+
+隐含假设（论文动机）：
+
+固定 raster-scan &#43; 固定位置编码会引入不合理归纳偏置；文档这种强结构视觉逻辑更需要“因果阅读流”
+
+
+
+
+方法细读
+模块 -&gt; 目的 -&gt; 关键公式/伪代码 -&gt; 复杂度/实现细节 &#43; 逐段证据
+总体架构：Encoder（DeepEncoder V2）&#43; Decoder（DeepSeek-MoE）
+
+目标：在 encoder 端就完成 token 压缩 &#43; token 重排（阅读顺序建模），decoder 侧保持 DeepSeek-OCR 的高效 MoE 解码。
+证据：明确“主要聚焦 encoder，不升级 decoder，保留 DeepSeek-OCR 的 3B MoE（~500M active）”。
+
+
+视觉 tokenizer（图像→视觉 token）
+
+做法：沿用 DeepEncoder 的 tokenizer：80M 参数 SAM-base &#43; 2 个卷积层；并把最后卷积层维度从 1024 改到 896 以对齐后续流水，采用的方法为 token compression 16×。
+目的：在进入“全局注意力的 LM-style encoder”前就把 token 数压到可控规模，降低计算/显存。
+
+
+LM 作为 Vision Encoder：双流注意力 &#43; 前缀拼接（核心创新）
+
+Dual-stream attention（双流注意力）：同一 transformer 序列里，前半段视觉 token 用双向注意力；后半段查询 token 用因果注意力。
+Causal flow queries / tokens（因果流查询 token）：可学习的查询向量序列，用来“按因果顺序”聚合视觉 token，并隐式学出阅读顺序。
+
+关键机制：">
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "/posts/"
+    }
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "DeepSeek OCR 2 创新点与技术细节｜AI笔记",
+      "item": "/posts/deepseek-ocr-2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "DeepSeek OCR 2 创新点与技术细节｜AI笔记",
+  "name": "DeepSeek OCR 2 创新点与技术细节｜AI笔记",
+  "description": " DeepSeek-OCR 2 的核心升级是用 LLM-style 视觉编码器 + 因果流（causal flow）查询 token 在编码阶段学到更接近人类阅读顺序的表示，在 相近/更小的视觉 token 预算下把 OmniDocBench v1.5 的整体指标从 87.36 提升到 91.09（+3.73）。\n这篇笔记聚焦 DeepSeek OCR 2 的方法动机与关键机制，尤其是“编码器端重排阅读顺序 + 解码器端保持高效自回归”的级联因果结构。\n贡献点 DeepEncoder V2：用“LLM 作为视觉编码器”替换 DeepEncoder 里的 CLIP ViT，目的是让编码器具备更贴近人类阅读的“因果视觉流”。（引言贡献点 (1)，图 1） 引入“因果流查询 token（causal flow tokens）”并用定制 attention mask：视觉 token 仍是双向全局注意力，但查询 token 走因果注意力，可逐步吸收视觉信息并形成“新阅读顺序”。（引言贡献点 (2)，方法 3.2.2 + 图 5 + 式 (1)） 保持查询 token 与视觉 token 等势（等数量），并且 只把查询 token（编码器输出后半段）喂给解码器，形成“编码器先重排、解码器再自回归推理”的级联因果结构。（引言贡献点 (3)(4)） 在不牺牲 token 压缩比/解码效率的前提下提高性能：把喂给 LLM 的视觉 token 预算约束在 256–1120（下限对齐 DeepSeek-OCR 的 1024^2 tokenization，上限对齐 Gemini-3 Pro token budget）。 实证：OmniDocBench v1.5 上整体 +3.73，阅读顺序 ED 从 0.085 降到 0.057，并在生产环境用 repetition rate 观测到质量提升。 问题定义与假设 输入：文档图像（多分辨率、多布局；方法中明确有 1024×1024 global view + 768×768 local crops） 输出：面向“文档阅读/解析”的文本与结构化内容（论文用 OmniDocBench 的多指标来衡量文本、公式、表格、阅读顺序） 关键约束： token 预算：喂给解码器的（重排后）视觉 token 总数在 [256, 1120]，通过 0–6 个 local crops 控制 可比性假设：训练数据源“基本一致”，仅做了轻量数据采样/标签合并，因此把 DeepSeek-OCR 视为有效 baseline 隐含假设（论文动机）： 固定 raster-scan + 固定位置编码会引入不合理归纳偏置；文档这种强结构视觉逻辑更需要“因果阅读流” 方法细读 模块 -\u0026gt; 目的 -\u0026gt; 关键公式/伪代码 -\u0026gt; 复杂度/实现细节 + 逐段证据 总体架构：Encoder（DeepEncoder V2）+ Decoder（DeepSeek-MoE） 目标：在 encoder 端就完成 token 压缩 + token 重排（阅读顺序建模），decoder 侧保持 DeepSeek-OCR 的高效 MoE 解码。 证据：明确“主要聚焦 encoder，不升级 decoder，保留 DeepSeek-OCR 的 3B MoE（~500M active）”。 视觉 tokenizer（图像→视觉 token） 做法：沿用 DeepEncoder 的 tokenizer：80M 参数 SAM-base + 2 个卷积层；并把最后卷积层维度从 1024 改到 896 以对齐后续流水，采用的方法为 token compression 16×。 目的：在进入“全局注意力的 LM-style encoder”前就把 token 数压到可控规模，降低计算/显存。 LM 作为 Vision Encoder：双流注意力 + 前缀拼接（核心创新） Dual-stream attention（双流注意力）：同一 transformer 序列里，前半段视觉 token 用双向注意力；后半段查询 token 用因果注意力。 Causal flow queries / tokens（因果流查询 token）：可学习的查询向量序列，用来“按因果顺序”聚合视觉 token，并隐式学出阅读顺序。 关键机制：\n",
+  "keywords": [
+    "技术", "多模态", "大模型", "DeepSeek"
+  ],
+  "articleBody": " DeepSeek-OCR 2 的核心升级是用 LLM-style 视觉编码器 + 因果流（causal flow）查询 token 在编码阶段学到更接近人类阅读顺序的表示，在 相近/更小的视觉 token 预算下把 OmniDocBench v1.5 的整体指标从 87.36 提升到 91.09（+3.73）。\n这篇笔记聚焦 DeepSeek OCR 2 的方法动机与关键机制，尤其是“编码器端重排阅读顺序 + 解码器端保持高效自回归”的级联因果结构。\n贡献点 DeepEncoder V2：用“LLM 作为视觉编码器”替换 DeepEncoder 里的 CLIP ViT，目的是让编码器具备更贴近人类阅读的“因果视觉流”。（引言贡献点 (1)，图 1） 引入“因果流查询 token（causal flow tokens）”并用定制 attention mask：视觉 token 仍是双向全局注意力，但查询 token 走因果注意力，可逐步吸收视觉信息并形成“新阅读顺序”。（引言贡献点 (2)，方法 3.2.2 + 图 5 + 式 (1)） 保持查询 token 与视觉 token 等势（等数量），并且 只把查询 token（编码器输出后半段）喂给解码器，形成“编码器先重排、解码器再自回归推理”的级联因果结构。（引言贡献点 (3)(4)） 在不牺牲 token 压缩比/解码效率的前提下提高性能：把喂给 LLM 的视觉 token 预算约束在 256–1120（下限对齐 DeepSeek-OCR 的 1024^2 tokenization，上限对齐 Gemini-3 Pro token budget）。 实证：OmniDocBench v1.5 上整体 +3.73，阅读顺序 ED 从 0.085 降到 0.057，并在生产环境用 repetition rate 观测到质量提升。 问题定义与假设 输入：文档图像（多分辨率、多布局；方法中明确有 1024×1024 global view + 768×768 local crops） 输出：面向“文档阅读/解析”的文本与结构化内容（论文用 OmniDocBench 的多指标来衡量文本、公式、表格、阅读顺序） 关键约束： token 预算：喂给解码器的（重排后）视觉 token 总数在 [256, 1120]，通过 0–6 个 local crops 控制 可比性假设：训练数据源“基本一致”，仅做了轻量数据采样/标签合并，因此把 DeepSeek-OCR 视为有效 baseline 隐含假设（论文动机）： 固定 raster-scan + 固定位置编码会引入不合理归纳偏置；文档这种强结构视觉逻辑更需要“因果阅读流” 方法细读 模块 -\u003e 目的 -\u003e 关键公式/伪代码 -\u003e 复杂度/实现细节 + 逐段证据 总体架构：Encoder（DeepEncoder V2）+ Decoder（DeepSeek-MoE） 目标：在 encoder 端就完成 token 压缩 + token 重排（阅读顺序建模），decoder 侧保持 DeepSeek-OCR 的高效 MoE 解码。 证据：明确“主要聚焦 encoder，不升级 decoder，保留 DeepSeek-OCR 的 3B MoE（~500M active）”。 视觉 tokenizer（图像→视觉 token） 做法：沿用 DeepEncoder 的 tokenizer：80M 参数 SAM-base + 2 个卷积层；并把最后卷积层维度从 1024 改到 896 以对齐后续流水，采用的方法为 token compression 16×。 目的：在进入“全局注意力的 LM-style encoder”前就把 token 数压到可控规模，降低计算/显存。 LM 作为 Vision Encoder：双流注意力 + 前缀拼接（核心创新） Dual-stream attention（双流注意力）：同一 transformer 序列里，前半段视觉 token 用双向注意力；后半段查询 token 用因果注意力。 Causal flow queries / tokens（因果流查询 token）：可学习的查询向量序列，用来“按因果顺序”聚合视觉 token，并隐式学出阅读顺序。 关键机制：\n视觉 token：bidirectional attention，保留类似 ViT/CLIP 的全局建模能力。 查询 token：causal attention，每个查询 token 能看全部视觉 token + 之前的查询 token，从而形成“渐进式重排/蒸馏”。 只输出查询 token 给 decoder：编码器输出的后半段才进入 LLM 解码器，形成级联因果推理。 工程选择与动机：\n实现实例：用 Qwen2-0.5B（500M） 初始化/实例化该 LM-style encoder，对标 CLIP ViT（300M）且避免过大开销。 prefix-concatenation（视觉 token 作为前缀与查询 token 拼接）：论文提到尝试 mBART 风格 encoder-decoder + cross-attn 失败不收敛，并推测原因是视觉 token 交互不足；而前缀拼接能让视觉 token 在各层保持“活跃”，促进与查询 token 信息交换。 查询 token 数量与 multi-crop：把“阅读重排能力”塞进固定预算 规则：查询 token 数 等于 视觉 token 数（n=m），并用 multi-crop 统一不同分辨率下的 query 配置。 目的：\n保持信息容量不变：每个查询 token “负责”重排一个视觉 token 的信息，避免信息丢失或冗余。 控制解码器 token 预算：由于只有查询 token 被送入解码器，n=m 意味着解码器接收的 token 数与原始视觉 token 数一致，不额外增加解码成本。 简化 multi-crop 配置：1:1 对应关系让不同分辨率的 crop 可以共享统一的查询配置逻辑，便于工程实现和超参管理。 便于公平对比：总 token 预算（256–1120）与 DeepSeek-OCR 原方案（最高 1156）基本对齐，确保性能提升来自“因果流重排”而非“更多 token”。 配置：\nglobal view：1024×1024 ⇒ 256 query_global local view：768×768 ⇒ 144 query_local（所有 local crops 共享同一套 144 queries） crops 数 k ∈ [0,6] ⇒ 总 token = k×144 + 256 ∈ [256,1120] 与 DeepSeek-OCR 的直接对比：最大 1120 token 低于 DeepSeek-OCR 的 1156（文中称 Gundam mode），并对齐 Gemini-3 Pro 的上限预算。\nAttention mask（式 (1) + 图 5）：为什么它能“重排” LowerTri(n)：n×n 下三角矩阵（对角线及以下为 1），对应标准 decoder-only 的因果掩码。 R-order Edit Distance：阅读顺序的编辑距离（越低越好）。 Mask 分块（式 (1)）：\n视觉 token 区：全 1（双向可见） 查询 token 区：LowerTri（因果） 查询 token 可以 attend 到所有视觉 token（下左块全 1），但视觉 token 不看查询 token（上右块全 0） 且 n=m 直觉：\n视觉 token 先形成一个“全局可交互”的视觉场。 查询 token 以因果方式逐步读取这个视觉场，并把“读到的内容”编码成序列 ⇒ 更贴近人类阅读的“因果扫视流”。 复杂度（从掩码结构推出的可解释结论） 设视觉 token 数 m，查询 token 数 n=m。单层注意力的有效计算量（按可见块估算）约为：\nVisual→Visual：m^2 Query→Visual：n·m = m^2 Query→Query（因果三角）：~n^2/2 = m^2/2 合计 ≈ 2.5·m^2（而如果对 2m token 全双向，会是 4m^2）。\n这不是论文显式数字，是从式 (1) 的可见区域推出来的结构性结论；证据基础：mask 的分块定义与 n=m。\n术语表 术语 解释 CLIP ViT **Contrastive Language-Image Pre-training Vision Transformer 对比式语言-图像预训练视觉 Transformer。**OpenAI 于 2021 年发布的多模态预训练模型，通过对比学习在 4 亿对图文数据上训练，使图像编码器（ViT）与文本编码器学会将匹配的图文对映射到相近的特征空间。被广泛用作多模态大模型的视觉特征提取器。 ED **Edit Distance 编辑距离。**用于衡量阅读顺序预测与真实顺序之间的差异，数值越低表示预测顺序越接近真实顺序。 Raster-scan **光栅扫描顺序。**一种固定的图像 patch 排列方式，按从左到右、从上到下的顺序将图像切块平铺成序列。传统 ViT 均采用此顺序，但对于复杂文档布局可能引入不合理的归纳偏置，不能反映真实的阅读顺序。 SAM-base **Segment Anything Model - Base。**Meta 发布的通用图像分割模型，Base 版本约 80M 参数。在 DeepSeek-OCR 2 中被用作视觉 tokenizer 的 backbone，配合卷积层实现图像特征提取与 token 压缩。 Token compression 16× **16 倍 token 压缩。**指视觉 token 数被窗口注意力/压缩模块减少到原来的 1/16 量级。在 DeepSeek-OCR 2 中，通过 SAM-base 后的 2 个卷积层实现，目的是在进入全局注意力的 LM-style encoder 前就把 token 数压到可控规模，降低计算与显存开销。 LowerTri(n) **n×n 下三角矩阵。**对角线及以下为 1，其余为 0。在 Transformer 中用作因果注意力掩码（causal attention mask），确保每个 token 只能 attend 到自己及之前的 token，是标准 decoder-only 模型的基础组件。 R-order Edit Distance **阅读顺序编辑距离。**用于衡量模型预测的阅读顺序与真实阅读顺序之间的差异，数值越低表示预测的阅读顺序越接近真实顺序。在 DeepSeek-OCR 2 中，该指标从 0.085 降到 0.057，证明因果流设计有效提升了阅读顺序建模能力。 ",
+  "wordCount" : "503",
+  "inLanguage": "en",
+  "image":"https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image2026127.png","datePublished": "2026-01-27T17:22:25+08:00",
+  "dateModified": "2026-01-27T17:22:25+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Me"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "/posts/deepseek-ocr-2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MekeyPan",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "/favicon.ico"
+    }
+  }
+}
+</script>
+</head>
+
+<body class="" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "dark") {
+        document.body.classList.add('dark');
+    } else if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('dark');
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="/" accesskey="h" title="Home (Alt + H)">
+                <img src="/icon.png" alt="" aria-label="logo"
+                    height="35">Home</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="/">Home</a>&nbsp;»&nbsp;<a href="/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      DeepSeek OCR 2 创新点与技术细节｜AI笔记
+    </h1>
+    <div class="post-meta"><span title='2026-01-27 17:22:25 +0800 CST'>January 27, 2026</span>&nbsp;·&nbsp;3 min&nbsp;·&nbsp;503 words&nbsp;·&nbsp;Me
+
+</div>
+  </header> 
+<figure class="entry-cover"><img loading="eager" src="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image2026127.png" alt="">
+        
+</figure><div class="toc">
+    <details >
+        <summary accesskey="c" title="(Alt + C)">
+            <span class="details">Table of Contents</span>
+        </summary>
+
+        <div class="inner"><nav id="TableOfContents">
+  <ul>
+    <li><a href="#贡献点">贡献点</a></li>
+    <li><a href="#问题定义与假设">问题定义与假设</a></li>
+    <li><a href="#方法细读">方法细读</a>
+      <ul>
+        <li><a href="#总体架构encoderdeepencoder-v2-decoderdeepseek-moe">总体架构：Encoder（DeepEncoder V2）+ Decoder（DeepSeek-MoE）</a></li>
+        <li><a href="#视觉-tokenizer图像视觉-token">视觉 tokenizer（图像→视觉 token）</a></li>
+        <li><a href="#lm-作为-vision-encoder双流注意力--前缀拼接核心创新">LM 作为 Vision Encoder：双流注意力 + 前缀拼接（核心创新）</a></li>
+        <li><a href="#查询-token-数量与-multi-crop把阅读重排能力塞进固定预算">查询 token 数量与 multi-crop：把“阅读重排能力”塞进固定预算</a></li>
+        <li><a href="#attention-mask式-1--图-5为什么它能重排">Attention mask（式 (1) + 图 5）：为什么它能“重排”</a></li>
+        <li><a href="#复杂度从掩码结构推出的可解释结论">复杂度（从掩码结构推出的可解释结论）</a></li>
+      </ul>
+    </li>
+    <li><a href="#术语表">术语表</a></li>
+  </ul>
+</nav>
+        </div>
+    </details>
+</div>
+
+  <div class="post-content"><blockquote>
+<p>DeepSeek-OCR 2 的核心升级是用 <strong>LLM-style 视觉编码器 + 因果流（causal flow）查询 token</strong> 在编码阶段学到更接近人类阅读顺序的表示，在 <strong>相近/更小的视觉 token 预算</strong>下把 OmniDocBench v1.5 的整体指标从 87.36 提升到 91.09（+3.73）。</p></blockquote>
+<p>这篇笔记聚焦 DeepSeek OCR 2 的方法动机与关键机制，尤其是“编码器端重排阅读顺序 + 解码器端保持高效自回归”的级联因果结构。</p>
+<h2 id="贡献点">贡献点<a hidden class="anchor" aria-hidden="true" href="#贡献点">#</a></h2>
+<ol>
+<li><strong>DeepEncoder V2：用“LLM 作为视觉编码器”替换 DeepEncoder 里的 CLIP ViT</strong>，目的是让编码器具备更贴近人类阅读的“因果视觉流”。（引言贡献点 (1)，图 1）</li>
+<li><strong>引入“因果流查询 token（causal flow tokens）”并用定制 attention mask</strong>：视觉 token 仍是双向全局注意力，但查询 token 走因果注意力，可逐步吸收视觉信息并形成“新阅读顺序”。（引言贡献点 (2)，方法 3.2.2 + 图 5 + 式 (1)）</li>
+<li><strong>保持查询 token 与视觉 token 等势（等数量）</strong>，并且 <strong>只把查询 token（编码器输出后半段）喂给解码器</strong>，形成“编码器先重排、解码器再自回归推理”的级联因果结构。（引言贡献点 (3)(4)）</li>
+<li><strong>在不牺牲 token 压缩比/解码效率的前提下提高性能</strong>：把喂给 LLM 的视觉 token 预算约束在 <strong>256–1120</strong>（下限对齐 DeepSeek-OCR 的 1024^2 tokenization，上限对齐 Gemini-3 Pro token budget）。</li>
+<li><strong>实证：OmniDocBench v1.5 上整体 +3.73，阅读顺序 ED 从 0.085 降到 0.057</strong>，并在生产环境用 repetition rate 观测到质量提升。</li>
+</ol>
+<hr>
+<h2 id="问题定义与假设">问题定义与假设<a hidden class="anchor" aria-hidden="true" href="#问题定义与假设">#</a></h2>
+<ul>
+<li>输入：文档图像（多分辨率、多布局；方法中明确有 1024×1024 global view + 768×768 local crops）</li>
+<li>输出：面向“文档阅读/解析”的文本与结构化内容（论文用 OmniDocBench 的多指标来衡量文本、公式、表格、阅读顺序）</li>
+<li>关键约束：
+<ul>
+<li><strong>token 预算</strong>：喂给解码器的（重排后）视觉 token 总数在 [256, 1120]，通过 0–6 个 local crops 控制</li>
+<li><strong>可比性假设</strong>：训练数据源“基本一致”，仅做了轻量数据采样/标签合并，因此把 DeepSeek-OCR 视为有效 baseline</li>
+</ul>
+</li>
+<li>隐含假设（论文动机）：
+<ul>
+<li>固定 raster-scan + 固定位置编码会引入不合理归纳偏置；文档这种强结构视觉逻辑更需要“因果阅读流”</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="方法细读">方法细读<a hidden class="anchor" aria-hidden="true" href="#方法细读">#</a></h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-txt" data-lang="txt"><span style="display:flex;"><span>模块 -&gt; 目的 -&gt; 关键公式/伪代码 -&gt; 复杂度/实现细节 + 逐段证据
+</span></span></code></pre></div><h3 id="总体架构encoderdeepencoder-v2-decoderdeepseek-moe">总体架构：Encoder（DeepEncoder V2）+ Decoder（DeepSeek-MoE）<a hidden class="anchor" aria-hidden="true" href="#总体架构encoderdeepencoder-v2-decoderdeepseek-moe">#</a></h3>
+<ul>
+<li>目标：在 encoder 端就完成 <strong>token 压缩 + token 重排（阅读顺序建模）</strong>，decoder 侧保持 DeepSeek-OCR 的高效 MoE 解码。</li>
+<li>证据：明确“主要聚焦 encoder，不升级 decoder，保留 DeepSeek-OCR 的 3B MoE（~500M active）”。</li>
+</ul>
+<hr>
+<h3 id="视觉-tokenizer图像视觉-token">视觉 tokenizer（图像→视觉 token）<a hidden class="anchor" aria-hidden="true" href="#视觉-tokenizer图像视觉-token">#</a></h3>
+<ul>
+<li>做法：沿用 DeepEncoder 的 tokenizer：<strong>80M 参数 SAM-base + 2 个卷积层</strong>；并把最后卷积层维度从 1024 改到 <strong>896</strong> 以对齐后续流水，采用的方法为 <strong>token compression 16×</strong>。</li>
+<li>目的：在进入“全局注意力的 LM-style encoder”前就把 token 数压到可控规模，降低计算/显存。</li>
+</ul>
+<hr>
+<h3 id="lm-作为-vision-encoder双流注意力--前缀拼接核心创新">LM 作为 Vision Encoder：双流注意力 + 前缀拼接（核心创新）<a hidden class="anchor" aria-hidden="true" href="#lm-作为-vision-encoder双流注意力--前缀拼接核心创新">#</a></h3>
+<ul>
+<li><strong>Dual-stream attention（双流注意力）</strong>：同一 transformer 序列里，前半段视觉 token 用双向注意力；后半段查询 token 用因果注意力。</li>
+<li><strong>Causal flow queries / tokens（因果流查询 token）</strong>：可学习的查询向量序列，用来“按因果顺序”聚合视觉 token，并隐式学出阅读顺序。</li>
+</ul>
+<p>关键机制：</p>
+<ol>
+<li><strong>视觉 token：bidirectional attention</strong>，保留类似 ViT/CLIP 的全局建模能力。</li>
+<li><strong>查询 token：causal attention</strong>，每个查询 token 能看全部视觉 token + 之前的查询 token，从而形成“渐进式重排/蒸馏”。</li>
+<li><strong>只输出查询 token 给 decoder</strong>：编码器输出的后半段才进入 LLM 解码器，形成级联因果推理。</li>
+</ol>
+<p>工程选择与动机：</p>
+<ul>
+<li>实现实例：用 <strong>Qwen2-0.5B（500M）</strong> 初始化/实例化该 LM-style encoder，对标 CLIP ViT（300M）且避免过大开销。</li>
+<li><strong>prefix-concatenation（视觉 token 作为前缀与查询 token 拼接）</strong>：论文提到尝试 mBART 风格 encoder-decoder + cross-attn 失败不收敛，并推测原因是视觉 token 交互不足；而前缀拼接能让视觉 token 在各层保持“活跃”，促进与查询 token 信息交换。</li>
+</ul>
+<hr>
+<h3 id="查询-token-数量与-multi-crop把阅读重排能力塞进固定预算">查询 token 数量与 multi-crop：把“阅读重排能力”塞进固定预算<a hidden class="anchor" aria-hidden="true" href="#查询-token-数量与-multi-crop把阅读重排能力塞进固定预算">#</a></h3>
+<ul>
+<li>规则：查询 token 数 <strong>等于</strong> 视觉 token 数（n=m），并用 multi-crop 统一不同分辨率下的 query 配置。</li>
+</ul>
+<p>目的：</p>
+<ol>
+<li><strong>保持信息容量不变</strong>：每个查询 token “负责”重排一个视觉 token 的信息，避免信息丢失或冗余。</li>
+<li><strong>控制解码器 token 预算</strong>：由于只有查询 token 被送入解码器，n=m 意味着解码器接收的 token 数与原始视觉 token 数一致，不额外增加解码成本。</li>
+<li><strong>简化 multi-crop 配置</strong>：1:1 对应关系让不同分辨率的 crop 可以共享统一的查询配置逻辑，便于工程实现和超参管理。</li>
+<li><strong>便于公平对比</strong>：总 token 预算（256–1120）与 DeepSeek-OCR 原方案（最高 1156）基本对齐，确保性能提升来自“因果流重排”而非“更多 token”。</li>
+</ol>
+<p>配置：</p>
+<ul>
+<li>global view：1024×1024 ⇒ <strong>256 query_global</strong></li>
+<li>local view：768×768 ⇒ <strong>144 query_local</strong>（所有 local crops 共享同一套 144 queries）</li>
+<li>crops 数 k ∈ [0,6] ⇒ 总 token = <strong>k×144 + 256 ∈ [256,1120]</strong></li>
+</ul>
+<p>与 DeepSeek-OCR 的直接对比：最大 1120 token <strong>低于</strong> DeepSeek-OCR 的 1156（文中称 Gundam mode），并对齐 Gemini-3 Pro 的上限预算。</p>
+<hr>
+<h3 id="attention-mask式-1--图-5为什么它能重排">Attention mask（式 (1) + 图 5）：为什么它能“重排”<a hidden class="anchor" aria-hidden="true" href="#attention-mask式-1--图-5为什么它能重排">#</a></h3>
+<ul>
+<li><strong>LowerTri(n)</strong>：n×n 下三角矩阵（对角线及以下为 1），对应标准 decoder-only 的因果掩码。</li>
+<li><strong>R-order Edit Distance</strong>：阅读顺序的编辑距离（越低越好）。</li>
+</ul>
+<p>Mask 分块（式 (1)）：</p>
+<ul>
+<li>视觉 token 区：全 1（双向可见）</li>
+<li>查询 token 区：LowerTri（因果）</li>
+<li>查询 token 可以 attend 到所有视觉 token（下左块全 1），但视觉 token 不看查询 token（上右块全 0）</li>
+<li>且 n=m</li>
+</ul>
+<p>直觉：</p>
+<ul>
+<li>视觉 token 先形成一个“全局可交互”的视觉场。</li>
+<li>查询 token 以因果方式逐步读取这个视觉场，并把“读到的内容”编码成序列 ⇒ 更贴近人类阅读的“因果扫视流”。</li>
+</ul>
+<hr>
+<h3 id="复杂度从掩码结构推出的可解释结论">复杂度（从掩码结构推出的可解释结论）<a hidden class="anchor" aria-hidden="true" href="#复杂度从掩码结构推出的可解释结论">#</a></h3>
+<p>设视觉 token 数 m，查询 token 数 n=m。单层注意力的有效计算量（按可见块估算）约为：</p>
+<ul>
+<li>Visual→Visual：m^2</li>
+<li>Query→Visual：n·m = m^2</li>
+<li>Query→Query（因果三角）：~n^2/2 = m^2/2</li>
+</ul>
+<p>合计 ≈ <strong>2.5·m^2</strong>（而如果对 2m token 全双向，会是 4m^2）。</p>
+<blockquote>
+<p>这不是论文显式数字，是从式 (1) 的可见区域推出来的结构性结论；证据基础：mask 的分块定义与 n=m。</p></blockquote>
+<h2 id="术语表">术语表<a hidden class="anchor" aria-hidden="true" href="#术语表">#</a></h2>
+<table>
+  <thead>
+      <tr>
+          <th>术语</th>
+          <th>解释</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>CLIP ViT</strong></td>
+          <td>**Contrastive Language-Image Pre-training Vision Transformer 对比式语言-图像预训练视觉 Transformer。**OpenAI 于 2021 年发布的多模态预训练模型，通过对比学习在 4 亿对图文数据上训练，使图像编码器（ViT）与文本编码器学会将匹配的图文对映射到相近的特征空间。被广泛用作多模态大模型的视觉特征提取器。</td>
+      </tr>
+      <tr>
+          <td><strong>ED</strong></td>
+          <td>**Edit Distance 编辑距离。**用于衡量阅读顺序预测与真实顺序之间的差异，数值越低表示预测顺序越接近真实顺序。</td>
+      </tr>
+      <tr>
+          <td><strong>Raster-scan</strong></td>
+          <td>**光栅扫描顺序。**一种固定的图像 patch 排列方式，按从左到右、从上到下的顺序将图像切块平铺成序列。传统 ViT 均采用此顺序，但对于复杂文档布局可能引入不合理的归纳偏置，不能反映真实的阅读顺序。</td>
+      </tr>
+      <tr>
+          <td><strong>SAM-base</strong></td>
+          <td>**Segment Anything Model - Base。**Meta 发布的通用图像分割模型，Base 版本约 80M 参数。在 DeepSeek-OCR 2 中被用作视觉 tokenizer 的 backbone，配合卷积层实现图像特征提取与 token 压缩。</td>
+      </tr>
+      <tr>
+          <td><strong>Token compression 16×</strong></td>
+          <td>**16 倍 token 压缩。**指视觉 token 数被窗口注意力/压缩模块减少到原来的 1/16 量级。在 DeepSeek-OCR 2 中，通过 SAM-base 后的 2 个卷积层实现，目的是在进入全局注意力的 LM-style encoder 前就把 token 数压到可控规模，降低计算与显存开销。</td>
+      </tr>
+      <tr>
+          <td><strong>LowerTri(n)</strong></td>
+          <td>**n×n 下三角矩阵。**对角线及以下为 1，其余为 0。在 Transformer 中用作因果注意力掩码（causal attention mask），确保每个 token 只能 attend 到自己及之前的 token，是标准 decoder-only 模型的基础组件。</td>
+      </tr>
+      <tr>
+          <td><strong>R-order Edit Distance</strong></td>
+          <td>**阅读顺序编辑距离。**用于衡量模型预测的阅读顺序与真实阅读顺序之间的差异，数值越低表示预测的阅读顺序越接近真实顺序。在 DeepSeek-OCR 2 中，该指标从 0.085 降到 0.057，证明因果流设计有效提升了阅读顺序建模能力。</td>
+      </tr>
+  </tbody>
+</table>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+      <li><a href="/tags/%E6%8A%80%E6%9C%AF/">技术</a></li>
+      <li><a href="/tags/%E5%A4%9A%E6%A8%A1%E6%80%81/">多模态</a></li>
+      <li><a href="/tags/%E5%A4%A7%E6%A8%A1%E5%9E%8B/">大模型</a></li>
+      <li><a href="/tags/deepseek/">DeepSeek</a></li>
+    </ul>
+<nav class="paginav">
+  <a class="prev" href="/posts/deepseek-v3.2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/">
+    <span class="title">« Prev</span>
+    <br>
+    <span>DeepSeek V3.2 创新点与技术细节｜AI笔记</span>
+  </a>
+  <a class="next" href="/posts/pull-me-through-the-fire-m_s_j%E9%9F%B3%E4%B9%90%E5%88%86%E4%BA%AB/">
+    <span class="title">Next »</span>
+    <br>
+    <span>Pull Me Through The Fire-M_S_J｜音乐分享</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2026 <a href="/">MekeyPan</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+</body>
+
+</html>

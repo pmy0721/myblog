@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>DeepSeek V3.2 创新点与技术细节｜AI笔记 | MekeyPan</title>
+<meta name="keywords" content="技术, 大模型, DeepSeek">
+<meta name="description" content="
+DeepSeek-V3.2 的核心升级可以概括为“三件套”：用 DSA 把 128K 长上下文推理/Agent 的注意力成本打下来、把 GRPO 的 RL 后训练算力规模化并稳定住、再用大规模 Agent 任务合成 &#43; 冷启动把“思考”融进工具调用，从而在 reasoning 与 agent 基准上把开源模型与闭源前沿差距显著缩小。
+贡献点
+
+DSA（DeepSeek Sparse Attention）：在长上下文下显著降计算复杂度，同时尽量保持性能
+
+
+摘要明确列为关键突破（1）
+结构上：由 lightning indexer &#43; fine-grained token selection（Top-k） 组成，并给出公式(1)(2)
+推理成本：将主注意力从 O(L^2) 降到 O(Lk)，并在 H800 集群服务成本曲线（Figure 3）展示长序列成本差异
+
+
+可扩展且稳定的 RL（基于 GRPO）：把“后训练算力占比”拉高到 &gt; 预训练 10%，并提出一套稳定训练的工程策略
+
+
+论文明确指出：后训练算力预算 exceeding 10% of the pre-training cost
+在 3.1 节给出 GRPO 目标公式(5)(6)并提出四个稳定策略：Unbiased KL Estimate / Off-Policy Sequence Masking / Keep Routing / Keep Sampling Mask
+
+
+“思考融入工具调用”的机制（Thinking in Tool-Use）：用“思考上下文管理 &#43; 冷启动 &#43; 大规模 Agent 任务”把 reasoning 能力迁移到 tool-use 场景
+
+
+3.2.1 给出思考保留规则（只在新 user message 到来才丢历史 reasoning；tool output 追加则保留 reasoning；保留 tool call 历史）
+3.2.3 给出 Agent 任务构造与规模：search/code/general/code interpreter，任务数量表（Table 1）
+
+
+大规模 Agent 任务合成流水线：合成 1,827 环境 &#43; 4,417 任务，并给出生成与验证流程（可自动验证）
+
+
+环境合成与验证的 3 步工作流 &#43; 最终保留 1,827 环境、4,417 任务
+
+
+Speciale 变体用于“更长思考”上限探索：通过“减少 length penalty、只训 reasoning 数据、引入 DeepSeekMath-V2 的数据/奖励”来推上限
+
+
+Speciale 训练方式描述
+4.2 明确：Speciale 通过更多 reasoning tokens 提升表现，但 token efficiency 明显更差
+
+
+问题定义与假设
+总体目标问题：在不牺牲太多质量的前提下，提升开源 LLM 在 长上下文推理 &#43; agent/tool-use 的能力与性价比，缩小与闭源前沿模型差距。">
+<meta name="author" content="Me">
+<link rel="canonical" href="/posts/deepseek-v3.2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.45e028aa8ce0961349adf411b013ee39406be2c0bc80d4ea3fc04555f7f4611a.css" integrity="sha256-ReAoqozglhNJrfQRsBPuOUBr4sC8gNTqP8BFVff0YRo=" rel="preload stylesheet" as="style">
+<link rel="icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="mask-icon" href="/safari-pinned-tab.svg">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="en" href="/posts/deepseek-v3.2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+    <style>
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --theme: rgb(29, 30, 32);
+                --entry: rgb(46, 46, 51);
+                --primary: rgb(218, 218, 219);
+                --secondary: rgb(155, 156, 157);
+                --tertiary: rgb(65, 66, 68);
+                --content: rgb(196, 196, 197);
+                --code-block-bg: rgb(46, 46, 51);
+                --code-bg: rgb(55, 56, 62);
+                --border: rgb(51, 51, 51);
+            }
+
+            .list {
+                background: var(--theme);
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-track {
+                background: 0 0;
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-thumb {
+                border-color: var(--theme);
+            }
+        }
+
+    </style>
+</noscript><meta property="og:url" content="/posts/deepseek-v3.2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/">
+  <meta property="og:site_name" content="MekeyPan">
+  <meta property="og:title" content="DeepSeek V3.2 创新点与技术细节｜AI笔记">
+  <meta property="og:description" content=" DeepSeek-V3.2 的核心升级可以概括为“三件套”：用 DSA 把 128K 长上下文推理/Agent 的注意力成本打下来、把 GRPO 的 RL 后训练算力规模化并稳定住、再用大规模 Agent 任务合成 &#43; 冷启动把“思考”融进工具调用，从而在 reasoning 与 agent 基准上把开源模型与闭源前沿差距显著缩小。
+贡献点 DSA（DeepSeek Sparse Attention）：在长上下文下显著降计算复杂度，同时尽量保持性能 摘要明确列为关键突破（1） 结构上：由 lightning indexer &#43; fine-grained token selection（Top-k） 组成，并给出公式(1)(2) 推理成本：将主注意力从 O(L^2) 降到 O(Lk)，并在 H800 集群服务成本曲线（Figure 3）展示长序列成本差异 可扩展且稳定的 RL（基于 GRPO）：把“后训练算力占比”拉高到 &gt; 预训练 10%，并提出一套稳定训练的工程策略 论文明确指出：后训练算力预算 exceeding 10% of the pre-training cost 在 3.1 节给出 GRPO 目标公式(5)(6)并提出四个稳定策略：Unbiased KL Estimate / Off-Policy Sequence Masking / Keep Routing / Keep Sampling Mask “思考融入工具调用”的机制（Thinking in Tool-Use）：用“思考上下文管理 &#43; 冷启动 &#43; 大规模 Agent 任务”把 reasoning 能力迁移到 tool-use 场景 3.2.1 给出思考保留规则（只在新 user message 到来才丢历史 reasoning；tool output 追加则保留 reasoning；保留 tool call 历史） 3.2.3 给出 Agent 任务构造与规模：search/code/general/code interpreter，任务数量表（Table 1） 大规模 Agent 任务合成流水线：合成 1,827 环境 &#43; 4,417 任务，并给出生成与验证流程（可自动验证） 环境合成与验证的 3 步工作流 &#43; 最终保留 1,827 环境、4,417 任务 Speciale 变体用于“更长思考”上限探索：通过“减少 length penalty、只训 reasoning 数据、引入 DeepSeekMath-V2 的数据/奖励”来推上限 Speciale 训练方式描述 4.2 明确：Speciale 通过更多 reasoning tokens 提升表现，但 token efficiency 明显更差 问题定义与假设 总体目标问题：在不牺牲太多质量的前提下，提升开源 LLM 在 长上下文推理 &#43; agent/tool-use 的能力与性价比，缩小与闭源前沿模型差距。">
+  <meta property="og:locale" content="en-us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="posts">
+    <meta property="article:published_time" content="2026-01-28T14:05:28+08:00">
+    <meta property="article:modified_time" content="2026-01-28T14:05:28+08:00">
+    <meta property="article:tag" content="技术">
+    <meta property="article:tag" content="大模型">
+    <meta property="article:tag" content="DeepSeek">
+    <meta property="og:image" content="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image2026128.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image2026128.png">
+<meta name="twitter:title" content="DeepSeek V3.2 创新点与技术细节｜AI笔记">
+<meta name="twitter:description" content="
+DeepSeek-V3.2 的核心升级可以概括为“三件套”：用 DSA 把 128K 长上下文推理/Agent 的注意力成本打下来、把 GRPO 的 RL 后训练算力规模化并稳定住、再用大规模 Agent 任务合成 &#43; 冷启动把“思考”融进工具调用，从而在 reasoning 与 agent 基准上把开源模型与闭源前沿差距显著缩小。
+贡献点
+
+DSA（DeepSeek Sparse Attention）：在长上下文下显著降计算复杂度，同时尽量保持性能
+
+
+摘要明确列为关键突破（1）
+结构上：由 lightning indexer &#43; fine-grained token selection（Top-k） 组成，并给出公式(1)(2)
+推理成本：将主注意力从 O(L^2) 降到 O(Lk)，并在 H800 集群服务成本曲线（Figure 3）展示长序列成本差异
+
+
+可扩展且稳定的 RL（基于 GRPO）：把“后训练算力占比”拉高到 &gt; 预训练 10%，并提出一套稳定训练的工程策略
+
+
+论文明确指出：后训练算力预算 exceeding 10% of the pre-training cost
+在 3.1 节给出 GRPO 目标公式(5)(6)并提出四个稳定策略：Unbiased KL Estimate / Off-Policy Sequence Masking / Keep Routing / Keep Sampling Mask
+
+
+“思考融入工具调用”的机制（Thinking in Tool-Use）：用“思考上下文管理 &#43; 冷启动 &#43; 大规模 Agent 任务”把 reasoning 能力迁移到 tool-use 场景
+
+
+3.2.1 给出思考保留规则（只在新 user message 到来才丢历史 reasoning；tool output 追加则保留 reasoning；保留 tool call 历史）
+3.2.3 给出 Agent 任务构造与规模：search/code/general/code interpreter，任务数量表（Table 1）
+
+
+大规模 Agent 任务合成流水线：合成 1,827 环境 &#43; 4,417 任务，并给出生成与验证流程（可自动验证）
+
+
+环境合成与验证的 3 步工作流 &#43; 最终保留 1,827 环境、4,417 任务
+
+
+Speciale 变体用于“更长思考”上限探索：通过“减少 length penalty、只训 reasoning 数据、引入 DeepSeekMath-V2 的数据/奖励”来推上限
+
+
+Speciale 训练方式描述
+4.2 明确：Speciale 通过更多 reasoning tokens 提升表现，但 token efficiency 明显更差
+
+
+问题定义与假设
+总体目标问题：在不牺牲太多质量的前提下，提升开源 LLM 在 长上下文推理 &#43; agent/tool-use 的能力与性价比，缩小与闭源前沿模型差距。">
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "/posts/"
+    }
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "DeepSeek V3.2 创新点与技术细节｜AI笔记",
+      "item": "/posts/deepseek-v3.2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "DeepSeek V3.2 创新点与技术细节｜AI笔记",
+  "name": "DeepSeek V3.2 创新点与技术细节｜AI笔记",
+  "description": " DeepSeek-V3.2 的核心升级可以概括为“三件套”：用 DSA 把 128K 长上下文推理/Agent 的注意力成本打下来、把 GRPO 的 RL 后训练算力规模化并稳定住、再用大规模 Agent 任务合成 + 冷启动把“思考”融进工具调用，从而在 reasoning 与 agent 基准上把开源模型与闭源前沿差距显著缩小。\n贡献点 DSA（DeepSeek Sparse Attention）：在长上下文下显著降计算复杂度，同时尽量保持性能 摘要明确列为关键突破（1） 结构上：由 lightning indexer + fine-grained token selection（Top-k） 组成，并给出公式(1)(2) 推理成本：将主注意力从 O(L^2) 降到 O(Lk)，并在 H800 集群服务成本曲线（Figure 3）展示长序列成本差异 可扩展且稳定的 RL（基于 GRPO）：把“后训练算力占比”拉高到 \u0026gt; 预训练 10%，并提出一套稳定训练的工程策略 论文明确指出：后训练算力预算 exceeding 10% of the pre-training cost 在 3.1 节给出 GRPO 目标公式(5)(6)并提出四个稳定策略：Unbiased KL Estimate / Off-Policy Sequence Masking / Keep Routing / Keep Sampling Mask “思考融入工具调用”的机制（Thinking in Tool-Use）：用“思考上下文管理 + 冷启动 + 大规模 Agent 任务”把 reasoning 能力迁移到 tool-use 场景 3.2.1 给出思考保留规则（只在新 user message 到来才丢历史 reasoning；tool output 追加则保留 reasoning；保留 tool call 历史） 3.2.3 给出 Agent 任务构造与规模：search/code/general/code interpreter，任务数量表（Table 1） 大规模 Agent 任务合成流水线：合成 1,827 环境 + 4,417 任务，并给出生成与验证流程（可自动验证） 环境合成与验证的 3 步工作流 + 最终保留 1,827 环境、4,417 任务 Speciale 变体用于“更长思考”上限探索：通过“减少 length penalty、只训 reasoning 数据、引入 DeepSeekMath-V2 的数据/奖励”来推上限 Speciale 训练方式描述 4.2 明确：Speciale 通过更多 reasoning tokens 提升表现，但 token efficiency 明显更差 问题定义与假设 总体目标问题：在不牺牲太多质量的前提下，提升开源 LLM 在 长上下文推理 + agent/tool-use 的能力与性价比，缩小与闭源前沿模型差距。\n",
+  "keywords": [
+    "技术", "大模型", "DeepSeek"
+  ],
+  "articleBody": " DeepSeek-V3.2 的核心升级可以概括为“三件套”：用 DSA 把 128K 长上下文推理/Agent 的注意力成本打下来、把 GRPO 的 RL 后训练算力规模化并稳定住、再用大规模 Agent 任务合成 + 冷启动把“思考”融进工具调用，从而在 reasoning 与 agent 基准上把开源模型与闭源前沿差距显著缩小。\n贡献点 DSA（DeepSeek Sparse Attention）：在长上下文下显著降计算复杂度，同时尽量保持性能 摘要明确列为关键突破（1） 结构上：由 lightning indexer + fine-grained token selection（Top-k） 组成，并给出公式(1)(2) 推理成本：将主注意力从 O(L^2) 降到 O(Lk)，并在 H800 集群服务成本曲线（Figure 3）展示长序列成本差异 可扩展且稳定的 RL（基于 GRPO）：把“后训练算力占比”拉高到 \u003e 预训练 10%，并提出一套稳定训练的工程策略 论文明确指出：后训练算力预算 exceeding 10% of the pre-training cost 在 3.1 节给出 GRPO 目标公式(5)(6)并提出四个稳定策略：Unbiased KL Estimate / Off-Policy Sequence Masking / Keep Routing / Keep Sampling Mask “思考融入工具调用”的机制（Thinking in Tool-Use）：用“思考上下文管理 + 冷启动 + 大规模 Agent 任务”把 reasoning 能力迁移到 tool-use 场景 3.2.1 给出思考保留规则（只在新 user message 到来才丢历史 reasoning；tool output 追加则保留 reasoning；保留 tool call 历史） 3.2.3 给出 Agent 任务构造与规模：search/code/general/code interpreter，任务数量表（Table 1） 大规模 Agent 任务合成流水线：合成 1,827 环境 + 4,417 任务，并给出生成与验证流程（可自动验证） 环境合成与验证的 3 步工作流 + 最终保留 1,827 环境、4,417 任务 Speciale 变体用于“更长思考”上限探索：通过“减少 length penalty、只训 reasoning 数据、引入 DeepSeekMath-V2 的数据/奖励”来推上限 Speciale 训练方式描述 4.2 明确：Speciale 通过更多 reasoning tokens 提升表现，但 token efficiency 明显更差 问题定义与假设 总体目标问题：在不牺牲太多质量的前提下，提升开源 LLM 在 长上下文推理 + agent/tool-use 的能力与性价比，缩小与闭源前沿模型差距。\n输入 长上下文 token 序列（最高 128K） RL 阶段的任务 prompt（reasoning / agent / alignment 混合） agent 环境的 tool 输出与多轮交互消息 输出 直接回答（non-thinking）或带 reasoning 的回答（thinking） 工具调用序列 + 最终答案（agent/tool-use） 关键约束/假设 长上下文效率瓶颈主要在注意力，需在结构上解决（论文点名“vanilla attention 限制效率”） 后训练算力不足是开源差距的重要原因，因此要敢于扩到 \u003e10% 预训练成本 tool-use 的 “thinking” 需要专门的上下文管理，否则会出现 token 低效与反复推理 方法细读 模块 → 目的 → 关键公式/实现 → 复杂度/细节 + 逐段证据 DSA：lightning indexer + Top-k token selection 目的：在 128K 长序列中，只让每个 query 关注少量关键 KV，降低主注意力开销。\nIndexer 打分（公式 1）：对 query token h_t 与历史 token h_s 计算索引分数 I_{t, s} ，多 indexer head 汇聚，并用 ReLU（吞吐考虑） Top-k 选择 + 稀疏注意力（公式 2）：取 Top-k 的 token 集合，只对这些 KV 做 Attention 得到输出 u_t 与 MLA 的关系：为从 V3.1-Terminus 继续训练，DSA 基于 MLA 实例化；出于 kernel 效率，采用 MLA 的 MQA 模式（共享 KV latent 给所有 query heads） 复杂度：主注意力从 O(L^2) → O(Lk)，其中 k \u003c\u003c L；indexer 仍是 O(L^2) 但计算量远小于 MLA。\nContinued Pre-Training：两阶段把模型“迁移到稀疏模式” 目的：让 indexer 学会拟合原本 dense attention 的分布，并让主模型适配稀疏注意力模式。\nDense Warm-up（只训 indexer） 冻结除 indexer 外所有参数，dense attention 保持不变 目标：indexer 输出拟合主注意力分布（KL loss，公式 3） 训练规模：1000 steps；每步 16×128K tokens；总 2.1B tokens Sparse Training（训全模型 + Top-k） 引入 Top-k selector，并继续用 KL 对齐，但只在选中集合 S_t 上对齐（公式 4） 关键实现：detach indexer input，indexer 只由 L_I 训练信号更新；主模型只按 LM loss 优化 超参：每个 query 选 2048 KV tokens；训练 15000 steps；每步 480×128K；总 943.7B tokens 推理成本与工程实现 成本估计来自 H800 集群服务实测，并假设租赁 2 USD/GPU hour；Figure 3 展示 prefill/decoding 的每百万 token 成本随位置变化 短序列 prefill：实现 masked MHA mode 来模拟 DSA 以提高短上下文效率 Post-Training：specialist distillation + mixed GRPO Specialist Distillation：先训各领域 specialist（数学、编程、逻辑推理、general agent、agentic coding、agentic search 等），再蒸馏到最终模型，并用后续 RL 消除差距 Mixed RL Training（GRPO）：把 reasoning/agent/human alignment 合并到同一 RL 阶段，避免多阶段训练的灾忘问题；奖励包括 rule-based outcome reward、length penalty、language consistency reward；general tasks 用带 rubric 的生成式 RM Scaling GRPO：四个“把 RL 扩大还能稳住”的关键补丁 GRPO 目标（公式 5/6）：importance sampling ratio r_{i,t} + clip + KL penalty\nUnbiased KL Estimate（公式 7）：修正 K3 estimator 得到无偏 KL 梯度，减少系统性误差，避免某些低概率 token 导致梯度爆炸与训练不稳 Off-Policy Sequence Masking（公式 8/9）：对“负优势且 KL 偏离过大”的序列打 mask，提升 off-policy 容忍度 Keep Routing：MoE 下保存采样时的 expert routing，并在训练时强制一致，避免参数子空间突变；并说明从 DeepSeek-V3-0324 起纳入 pipeline Keep Sampling Mask：保留 top-p/top-k 的 truncation mask，使 \\pi_{old} 与 \\pi_\\theta 共享 action 子空间，稳定重要性采样 Thinking in Tool-Use：让“思考”不浪费 token、能跨工具轮次持续 Thinking Context Management：只在“新 user message”出现时丢历史 reasoning；tool output 追加则保留 reasoning；同时保留 tool calls \u0026 results 历史 Cold-Start：用 system prompt 设计把 reasoning data 与 toolcall data 拼起来，让模型偶尔生成正确轨迹作为后续 RL 起点 术语表 术语 说明 DSA DeepSeek Sparse Attention, DeepSeek 提出的稀疏注意力机制，通过 lightning indexer + fine-grained token selection 将注意力复杂度从 O(L²) 降至 O(Lk)，显著降低长上下文推理成本 Lightning Indexer 闪电索引器，DSA 的核心组件之一，用于快速索引和定位关键 token，配合 Top-k 细粒度选择实现高效稀疏注意力 GRPO (Group Relative Policy Optimization) **分组相对策略优化，**DeepSeek 使用的强化学习后训练算法，通过分组相对策略优化实现可扩展且稳定的 RL 训练，后训练算力预算超过预训练成本的 10% Unbiased KL Estimate **无偏 KL 散度估计，**GRPO 稳定训练策略之一，通过无偏 KL 散度估计避免策略更新时的偏差累积，提高 RL 训练稳定性 Off-Policy Sequence Masking **离策略序列掩码，**GRPO 稳定训练策略之一，对离策略（off-policy）序列进行掩码处理，减少过时样本对训练的干扰 Keep Routing **保持路由，**GRPO 稳定训练策略之一，在 MoE 架构中保持专家路由的一致性，避免 RL 训练过程中路由分布剧烈波动 Keep Sampling Mask **保持采样掩码，**GRPO 稳定训练策略之一，保持采样掩码的一致性，确保训练过程中样本生成与梯度计算的匹配 Speciale DeepSeek-V3.2 的特殊变体版本，用于探索“更长思考”的性能上限。通过减少 length penalty、只训练 reasoning 数据、引入 DeepSeekMath-V2 的数据/奖励来提升推理能力，但 token efficiency 较差 MLA (Multi-head Latent Attention) 多头潜在注意力，DeepSeek 提出的高效注意力机制，通过将 KV 压缩到低维潜在空间来减少 KV cache 的显存占用。DSA 基于 MLA 实例化，并采用 MQA 模式（所有 query heads 共享 KV latent）以提升 kernel 效率 ",
+  "wordCount" : "562",
+  "inLanguage": "en",
+  "image":"https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image2026128.png","datePublished": "2026-01-28T14:05:28+08:00",
+  "dateModified": "2026-01-28T14:05:28+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Me"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "/posts/deepseek-v3.2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MekeyPan",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "/favicon.ico"
+    }
+  }
+}
+</script>
+</head>
+
+<body class="" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "dark") {
+        document.body.classList.add('dark');
+    } else if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('dark');
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="/" accesskey="h" title="Home (Alt + H)">
+                <img src="/icon.png" alt="" aria-label="logo"
+                    height="35">Home</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="/">Home</a>&nbsp;»&nbsp;<a href="/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      DeepSeek V3.2 创新点与技术细节｜AI笔记
+    </h1>
+    <div class="post-meta"><span title='2026-01-28 14:05:28 +0800 CST'>January 28, 2026</span>&nbsp;·&nbsp;3 min&nbsp;·&nbsp;562 words&nbsp;·&nbsp;Me
+
+</div>
+  </header> 
+<figure class="entry-cover"><img loading="eager" src="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image2026128.png" alt="">
+        
+</figure><div class="toc">
+    <details >
+        <summary accesskey="c" title="(Alt + C)">
+            <span class="details">Table of Contents</span>
+        </summary>
+
+        <div class="inner"><nav id="TableOfContents">
+  <ul>
+    <li><a href="#贡献点">贡献点</a></li>
+    <li><a href="#问题定义与假设"><strong>问题定义与假设</strong></a></li>
+    <li><a href="#方法细读"><strong>方法细读</strong></a></li>
+    <li><a href="#dsalightning-indexer--top-k-token-selection"><strong>DSA：lightning indexer + Top-k token selection</strong></a></li>
+    <li><a href="#continued-pre-training两阶段把模型迁移到稀疏模式"><strong>Continued Pre-Training：两阶段把模型“迁移到稀疏模式”</strong></a></li>
+    <li><a href="#推理成本与工程实现"><strong>推理成本与工程实现</strong></a></li>
+    <li><a href="#post-trainingspecialist-distillation--mixed-grpo"><strong>Post-Training：specialist distillation + mixed GRPO</strong></a></li>
+    <li><a href="#scaling-grpo四个把-rl-扩大还能稳住的关键补丁"><strong>Scaling GRPO：四个“把 RL 扩大还能稳住”的关键补丁</strong></a></li>
+    <li><a href="#thinking-in-tool-use让思考不浪费-token能跨工具轮次持续"><strong>Thinking in Tool-Use：让“思考”不浪费 token、能跨工具轮次持续</strong></a></li>
+    <li><a href="#术语表">术语表</a></li>
+  </ul>
+</nav>
+        </div>
+    </details>
+</div>
+
+  <div class="post-content"><blockquote>
+<p>DeepSeek-V3.2 的核心升级可以概括为“三件套”：<strong>用 DSA 把 128K 长上下文推理/Agent 的注意力成本打下来</strong>、<strong>把 GRPO 的 RL 后训练算力规模化并稳定住</strong>、再用<strong>大规模 Agent 任务合成 + 冷启动把“思考”融进工具调用</strong>，从而在 reasoning 与 agent 基准上把开源模型与闭源前沿差距显著缩小。</p></blockquote>
+<h2 id="贡献点">贡献点<a hidden class="anchor" aria-hidden="true" href="#贡献点">#</a></h2>
+<ol>
+<li><strong>DSA（DeepSeek Sparse Attention）</strong>：在长上下文下显著降计算复杂度，同时尽量保持性能</li>
+</ol>
+<ul>
+<li>摘要明确列为关键突破（1）</li>
+<li>结构上：由 <strong>lightning indexer + fine-grained token selection（Top-k）</strong> 组成，并给出公式(1)(2)</li>
+<li>推理成本：将主注意力从 O(L^2) 降到 O(Lk)，并在 H800 集群服务成本曲线（Figure 3）展示长序列成本差异</li>
+</ul>
+<ol start="2">
+<li><strong>可扩展且稳定的 RL（基于 GRPO）</strong>：把“后训练算力占比”拉高到 <strong>&gt; 预训练 10%</strong>，并提出一套稳定训练的工程策略</li>
+</ol>
+<ul>
+<li>论文明确指出：后训练算力预算 <strong>exceeding 10% of the pre-training cost</strong></li>
+<li>在 3.1 节给出 GRPO 目标公式(5)(6)并提出四个稳定策略：<strong>Unbiased KL Estimate / Off-Policy Sequence Masking / Keep Routing / Keep Sampling Mask</strong></li>
+</ul>
+<ol start="3">
+<li><strong>“思考融入工具调用”的机制（Thinking in Tool-Use）</strong>：用“思考上下文管理 + 冷启动 + 大规模 Agent 任务”把 reasoning 能力迁移到 tool-use 场景</li>
+</ol>
+<ul>
+<li>3.2.1 给出<strong>思考保留规则</strong>（只在新 user message 到来才丢历史 reasoning；tool output 追加则保留 reasoning；保留 tool call 历史）</li>
+<li>3.2.3 给出 Agent 任务构造与规模：search/code/general/code interpreter，任务数量表（Table 1）</li>
+</ul>
+<ol start="4">
+<li><strong>大规模 Agent 任务合成流水线</strong>：合成 <strong>1,827 环境 + 4,417 任务</strong>，并给出生成与验证流程（可自动验证）</li>
+</ol>
+<ul>
+<li>环境合成与验证的 3 步工作流 + 最终保留 1,827 环境、4,417 任务</li>
+</ul>
+<ol start="5">
+<li><strong>Speciale 变体用于“更长思考”上限探索</strong>：通过“减少 length penalty、只训 reasoning 数据、引入 DeepSeekMath-V2 的数据/奖励”来推上限</li>
+</ol>
+<ul>
+<li>Speciale 训练方式描述</li>
+<li>4.2 明确：Speciale 通过更多 reasoning tokens 提升表现，但 token efficiency 明显更差</li>
+</ul>
+<hr>
+<h2 id="问题定义与假设"><strong>问题定义与假设</strong><a hidden class="anchor" aria-hidden="true" href="#问题定义与假设">#</a></h2>
+<p><strong>总体目标问题</strong>：在不牺牲太多质量的前提下，提升开源 LLM 在 <strong>长上下文推理 + agent/tool-use</strong> 的能力与性价比，缩小与闭源前沿模型差距。</p>
+<ul>
+<li><strong>输入</strong>
+<ul>
+<li>长上下文 token 序列（最高 128K）</li>
+<li>RL 阶段的任务 prompt（reasoning / agent / alignment 混合）</li>
+<li>agent 环境的 tool 输出与多轮交互消息</li>
+</ul>
+</li>
+<li><strong>输出</strong>
+<ul>
+<li>直接回答（non-thinking）或带 <!-- raw HTML omitted --> reasoning 的回答（thinking）</li>
+<li>工具调用序列 + 最终答案（agent/tool-use）</li>
+</ul>
+</li>
+<li><strong>关键约束/假设</strong>
+<ol>
+<li><strong>长上下文效率瓶颈主要在注意力</strong>，需在结构上解决（论文点名“vanilla attention 限制效率”）</li>
+<li><strong>后训练算力不足是开源差距的重要原因</strong>，因此要敢于扩到 &gt;10% 预训练成本</li>
+<li>tool-use 的 “thinking” 需要专门的上下文管理，否则会出现 token 低效与反复推理</li>
+</ol>
+</li>
+</ul>
+<hr>
+<h2 id="方法细读"><strong>方法细读</strong><a hidden class="anchor" aria-hidden="true" href="#方法细读">#</a></h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-txt" data-lang="txt"><span style="display:flex;"><span>模块 → 目的 → 关键公式/实现 → 复杂度/细节 + 逐段证据
+</span></span></code></pre></div><h2 id="dsalightning-indexer--top-k-token-selection"><strong>DSA：lightning indexer + Top-k token selection</strong><a hidden class="anchor" aria-hidden="true" href="#dsalightning-indexer--top-k-token-selection">#</a></h2>
+<p><strong>目的</strong>：在 128K 长序列中，只让每个 query 关注少量关键 KV，降低主注意力开销。</p>
+<ul>
+<li><strong>Indexer 打分（公式 1）</strong>：对 query token <code>h_t</code> 与历史 token <code>h_s</code> 计算索引分数 <code>I_{t, s}</code> ，多 indexer head 汇聚，并用 ReLU（吞吐考虑）</li>
+<li><strong>Top-k 选择 + 稀疏注意力（公式 2）</strong>：取 Top-k 的 token 集合，只对这些 KV 做 Attention 得到输出 <code>u_t</code></li>
+<li><strong>与 MLA 的关系</strong>：为从 V3.1-Terminus 继续训练，DSA 基于 MLA 实例化；出于 kernel 效率，采用 MLA 的 <strong>MQA 模式</strong>（共享 KV latent 给所有 query heads）</li>
+</ul>
+<p><strong>复杂度</strong>：主注意力从 <code>O(L^2)</code> → <code>O(Lk)</code>，其中 <code>k &lt;&lt; L</code>；indexer 仍是 <code>O(L^2)</code> 但计算量远小于 MLA。</p>
+<h2 id="continued-pre-training两阶段把模型迁移到稀疏模式"><strong>Continued Pre-Training：两阶段把模型“迁移到稀疏模式”</strong><a hidden class="anchor" aria-hidden="true" href="#continued-pre-training两阶段把模型迁移到稀疏模式">#</a></h2>
+<p><strong>目的</strong>：让 indexer 学会拟合原本 dense attention 的分布，并让主模型适配稀疏注意力模式。</p>
+<ol>
+<li><strong>Dense Warm-up（只训 indexer）</strong></li>
+</ol>
+<ul>
+<li>冻结除 indexer 外所有参数，dense attention 保持不变</li>
+<li>目标：indexer 输出拟合主注意力分布（KL loss，公式 3）</li>
+<li>训练规模：1000 steps；每步 16×128K tokens；总 <strong>2.1B tokens</strong></li>
+</ul>
+<ol start="2">
+<li><strong>Sparse Training（训全模型 + Top-k）</strong></li>
+</ol>
+<ul>
+<li>引入 Top-k selector，并继续用 KL 对齐，但只在选中集合 <code>S_t</code> 上对齐（公式 4）</li>
+<li>关键实现：<strong>detach indexer input</strong>，indexer 只由 <code>L_I</code> 训练信号更新；主模型只按 LM loss 优化</li>
+<li>超参：每个 query 选 <strong>2048 KV tokens</strong>；训练 15000 steps；每步 480×128K；总 <strong>943.7B tokens</strong></li>
+</ul>
+<h2 id="推理成本与工程实现"><strong>推理成本与工程实现</strong><a hidden class="anchor" aria-hidden="true" href="#推理成本与工程实现">#</a></h2>
+<ul>
+<li>成本估计来自 <strong>H800 集群服务实测</strong>，并假设租赁 <strong>2 USD/GPU hour</strong>；Figure 3 展示 prefill/decoding 的每百万 token 成本随位置变化</li>
+<li>短序列 prefill：实现 <strong>masked MHA mode</strong> 来模拟 DSA 以提高短上下文效率</li>
+</ul>
+<h2 id="post-trainingspecialist-distillation--mixed-grpo"><strong>Post-Training：specialist distillation + mixed GRPO</strong><a hidden class="anchor" aria-hidden="true" href="#post-trainingspecialist-distillation--mixed-grpo">#</a></h2>
+<ul>
+<li><strong>Specialist Distillation</strong>：先训各领域 specialist（数学、编程、逻辑推理、general agent、agentic coding、agentic search 等），再蒸馏到最终模型，并用后续 RL 消除差距</li>
+<li><strong>Mixed RL Training（GRPO）</strong>：把 reasoning/agent/human alignment 合并到同一 RL 阶段，避免多阶段训练的灾忘问题；奖励包括 rule-based outcome reward、length penalty、language consistency reward；general tasks 用带 rubric 的生成式 RM</li>
+</ul>
+<h2 id="scaling-grpo四个把-rl-扩大还能稳住的关键补丁"><strong>Scaling GRPO：四个“把 RL 扩大还能稳住”的关键补丁</strong><a hidden class="anchor" aria-hidden="true" href="#scaling-grpo四个把-rl-扩大还能稳住的关键补丁">#</a></h2>
+<p><strong>GRPO 目标（公式 5/6）</strong>：importance sampling ratio <code>r_{i,t}</code> + clip + KL penalty</p>
+<ul>
+<li><strong>Unbiased KL Estimate（公式 7）</strong>：修正 K3 estimator 得到<strong>无偏 KL 梯度</strong>，减少系统性误差，避免某些低概率 token 导致梯度爆炸与训练不稳</li>
+<li><strong>Off-Policy Sequence Masking（公式 8/9）</strong>：对“负优势且 KL 偏离过大”的序列打 mask，提升 off-policy 容忍度</li>
+<li><strong>Keep Routing</strong>：MoE 下保存采样时的 expert routing，并在训练时强制一致，避免参数子空间突变；并说明从 DeepSeek-V3-0324 起纳入 pipeline</li>
+<li><strong>Keep Sampling Mask</strong>：保留 top-p/top-k 的 truncation mask，使 <code>\pi_{old}</code> 与 <code>\pi_\theta</code> 共享 action 子空间，稳定重要性采样</li>
+</ul>
+<h2 id="thinking-in-tool-use让思考不浪费-token能跨工具轮次持续"><strong>Thinking in Tool-Use：让“思考”不浪费 token、能跨工具轮次持续</strong><a hidden class="anchor" aria-hidden="true" href="#thinking-in-tool-use让思考不浪费-token能跨工具轮次持续">#</a></h2>
+<ul>
+<li><strong>Thinking Context Management</strong>：只在“新 user message”出现时丢历史 reasoning；tool output 追加则保留 reasoning；同时保留 tool calls &amp; results 历史</li>
+<li><strong>Cold-Start</strong>：用 system prompt 设计把 reasoning data 与 toolcall data 拼起来，让模型偶尔生成正确轨迹作为后续 RL 起点</li>
+</ul>
+<h2 id="术语表">术语表<a hidden class="anchor" aria-hidden="true" href="#术语表">#</a></h2>
+<table>
+  <thead>
+      <tr>
+          <th>术语</th>
+          <th>说明</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>DSA</strong></td>
+          <td><strong>DeepSeek Sparse Attention,</strong> DeepSeek 提出的稀疏注意力机制，通过 lightning indexer + fine-grained token selection 将注意力复杂度从 O(L²) 降至 O(Lk)，显著降低长上下文推理成本</td>
+      </tr>
+      <tr>
+          <td><strong>Lightning Indexer</strong></td>
+          <td><strong>闪电索引器</strong>，DSA 的核心组件之一，用于快速索引和定位关键 token，配合 Top-k 细粒度选择实现高效稀疏注意力</td>
+      </tr>
+      <tr>
+          <td><strong>GRPO (Group Relative Policy Optimization)</strong></td>
+          <td>**分组相对策略优化，**DeepSeek 使用的强化学习后训练算法，通过分组相对策略优化实现可扩展且稳定的 RL 训练，后训练算力预算超过预训练成本的 10%</td>
+      </tr>
+      <tr>
+          <td><strong>Unbiased KL Estimate</strong></td>
+          <td>**无偏 KL 散度估计，**GRPO 稳定训练策略之一，通过无偏 KL 散度估计避免策略更新时的偏差累积，提高 RL 训练稳定性</td>
+      </tr>
+      <tr>
+          <td><strong>Off-Policy Sequence Masking</strong></td>
+          <td>**离策略序列掩码，**GRPO 稳定训练策略之一，对离策略（off-policy）序列进行掩码处理，减少过时样本对训练的干扰</td>
+      </tr>
+      <tr>
+          <td><strong>Keep Routing</strong></td>
+          <td>**保持路由，**GRPO 稳定训练策略之一，在 MoE 架构中保持专家路由的一致性，避免 RL 训练过程中路由分布剧烈波动</td>
+      </tr>
+      <tr>
+          <td><strong>Keep Sampling Mask</strong></td>
+          <td>**保持采样掩码，**GRPO 稳定训练策略之一，保持采样掩码的一致性，确保训练过程中样本生成与梯度计算的匹配</td>
+      </tr>
+      <tr>
+          <td><strong>Speciale</strong></td>
+          <td>DeepSeek-V3.2 的特殊变体版本，用于探索“更长思考”的性能上限。通过减少 length penalty、只训练 reasoning 数据、引入 DeepSeekMath-V2 的数据/奖励来提升推理能力，但 token efficiency 较差</td>
+      </tr>
+      <tr>
+          <td><strong>MLA (Multi-head Latent Attention)</strong></td>
+          <td><strong>多头潜在注意力</strong>，DeepSeek 提出的高效注意力机制，通过将 KV 压缩到低维潜在空间来减少 KV cache 的显存占用。DSA 基于 MLA 实例化，并采用 MQA 模式（所有 query heads 共享 KV latent）以提升 kernel 效率</td>
+      </tr>
+  </tbody>
+</table>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+      <li><a href="/tags/%E6%8A%80%E6%9C%AF/">技术</a></li>
+      <li><a href="/tags/%E5%A4%A7%E6%A8%A1%E5%9E%8B/">大模型</a></li>
+      <li><a href="/tags/deepseek/">DeepSeek</a></li>
+    </ul>
+<nav class="paginav">
+  <a class="next" href="/posts/deepseek-ocr-2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/">
+    <span class="title">Next »</span>
+    <br>
+    <span>DeepSeek OCR 2 创新点与技术细节｜AI笔记</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2026 <a href="/">MekeyPan</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+</body>
+
+</html>

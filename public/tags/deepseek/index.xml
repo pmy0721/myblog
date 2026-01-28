@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>DeepSeek on MekeyPan</title>
+    <link>/tags/deepseek/</link>
+    <description>Recent content in DeepSeek on MekeyPan</description>
+    <generator>Hugo -- 0.144.2</generator>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 28 Jan 2026 14:05:28 +0800</lastBuildDate>
+    <atom:link href="/tags/deepseek/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>DeepSeek V3.2 创新点与技术细节｜AI笔记</title>
+      <link>/posts/deepseek-v3.2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/</link>
+      <pubDate>Wed, 28 Jan 2026 14:05:28 +0800</pubDate>
+      <guid>/posts/deepseek-v3.2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/</guid>
+      <description>&lt;blockquote&gt;
+&lt;p&gt;DeepSeek-V3.2 的核心升级可以概括为“三件套”：&lt;strong&gt;用 DSA 把 128K 长上下文推理/Agent 的注意力成本打下来&lt;/strong&gt;、&lt;strong&gt;把 GRPO 的 RL 后训练算力规模化并稳定住&lt;/strong&gt;、再用&lt;strong&gt;大规模 Agent 任务合成 + 冷启动把“思考”融进工具调用&lt;/strong&gt;，从而在 reasoning 与 agent 基准上把开源模型与闭源前沿差距显著缩小。&lt;/p&gt;&lt;/blockquote&gt;
+&lt;h2 id=&#34;贡献点&#34;&gt;贡献点&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;DSA（DeepSeek Sparse Attention）&lt;/strong&gt;：在长上下文下显著降计算复杂度，同时尽量保持性能&lt;/li&gt;
+&lt;/ol&gt;
+&lt;ul&gt;
+&lt;li&gt;摘要明确列为关键突破（1）&lt;/li&gt;
+&lt;li&gt;结构上：由 &lt;strong&gt;lightning indexer + fine-grained token selection（Top-k）&lt;/strong&gt; 组成，并给出公式(1)(2)&lt;/li&gt;
+&lt;li&gt;推理成本：将主注意力从 O(L^2) 降到 O(Lk)，并在 H800 集群服务成本曲线（Figure 3）展示长序列成本差异&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol start=&#34;2&#34;&gt;
+&lt;li&gt;&lt;strong&gt;可扩展且稳定的 RL（基于 GRPO）&lt;/strong&gt;：把“后训练算力占比”拉高到 &lt;strong&gt;&amp;gt; 预训练 10%&lt;/strong&gt;，并提出一套稳定训练的工程策略&lt;/li&gt;
+&lt;/ol&gt;
+&lt;ul&gt;
+&lt;li&gt;论文明确指出：后训练算力预算 &lt;strong&gt;exceeding 10% of the pre-training cost&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;在 3.1 节给出 GRPO 目标公式(5)(6)并提出四个稳定策略：&lt;strong&gt;Unbiased KL Estimate / Off-Policy Sequence Masking / Keep Routing / Keep Sampling Mask&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol start=&#34;3&#34;&gt;
+&lt;li&gt;&lt;strong&gt;“思考融入工具调用”的机制（Thinking in Tool-Use）&lt;/strong&gt;：用“思考上下文管理 + 冷启动 + 大规模 Agent 任务”把 reasoning 能力迁移到 tool-use 场景&lt;/li&gt;
+&lt;/ol&gt;
+&lt;ul&gt;
+&lt;li&gt;3.2.1 给出&lt;strong&gt;思考保留规则&lt;/strong&gt;（只在新 user message 到来才丢历史 reasoning；tool output 追加则保留 reasoning；保留 tool call 历史）&lt;/li&gt;
+&lt;li&gt;3.2.3 给出 Agent 任务构造与规模：search/code/general/code interpreter，任务数量表（Table 1）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol start=&#34;4&#34;&gt;
+&lt;li&gt;&lt;strong&gt;大规模 Agent 任务合成流水线&lt;/strong&gt;：合成 &lt;strong&gt;1,827 环境 + 4,417 任务&lt;/strong&gt;，并给出生成与验证流程（可自动验证）&lt;/li&gt;
+&lt;/ol&gt;
+&lt;ul&gt;
+&lt;li&gt;环境合成与验证的 3 步工作流 + 最终保留 1,827 环境、4,417 任务&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol start=&#34;5&#34;&gt;
+&lt;li&gt;&lt;strong&gt;Speciale 变体用于“更长思考”上限探索&lt;/strong&gt;：通过“减少 length penalty、只训 reasoning 数据、引入 DeepSeekMath-V2 的数据/奖励”来推上限&lt;/li&gt;
+&lt;/ol&gt;
+&lt;ul&gt;
+&lt;li&gt;Speciale 训练方式描述&lt;/li&gt;
+&lt;li&gt;4.2 明确：Speciale 通过更多 reasoning tokens 提升表现，但 token efficiency 明显更差&lt;/li&gt;
+&lt;/ul&gt;
+&lt;hr&gt;
+&lt;h2 id=&#34;问题定义与假设&#34;&gt;&lt;strong&gt;问题定义与假设&lt;/strong&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;strong&gt;总体目标问题&lt;/strong&gt;：在不牺牲太多质量的前提下，提升开源 LLM 在 &lt;strong&gt;长上下文推理 + agent/tool-use&lt;/strong&gt; 的能力与性价比，缩小与闭源前沿模型差距。&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>DeepSeek OCR 2 创新点与技术细节｜AI笔记</title>
+      <link>/posts/deepseek-ocr-2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/</link>
+      <pubDate>Tue, 27 Jan 2026 17:22:25 +0800</pubDate>
+      <guid>/posts/deepseek-ocr-2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/</guid>
+      <description>&lt;blockquote&gt;
+&lt;p&gt;DeepSeek-OCR 2 的核心升级是用 &lt;strong&gt;LLM-style 视觉编码器 + 因果流（causal flow）查询 token&lt;/strong&gt; 在编码阶段学到更接近人类阅读顺序的表示，在 &lt;strong&gt;相近/更小的视觉 token 预算&lt;/strong&gt;下把 OmniDocBench v1.5 的整体指标从 87.36 提升到 91.09（+3.73）。&lt;/p&gt;&lt;/blockquote&gt;
+&lt;p&gt;这篇笔记聚焦 DeepSeek OCR 2 的方法动机与关键机制，尤其是“编码器端重排阅读顺序 + 解码器端保持高效自回归”的级联因果结构。&lt;/p&gt;
+&lt;h2 id=&#34;贡献点&#34;&gt;贡献点&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;DeepEncoder V2：用“LLM 作为视觉编码器”替换 DeepEncoder 里的 CLIP ViT&lt;/strong&gt;，目的是让编码器具备更贴近人类阅读的“因果视觉流”。（引言贡献点 (1)，图 1）&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;引入“因果流查询 token（causal flow tokens）”并用定制 attention mask&lt;/strong&gt;：视觉 token 仍是双向全局注意力，但查询 token 走因果注意力，可逐步吸收视觉信息并形成“新阅读顺序”。（引言贡献点 (2)，方法 3.2.2 + 图 5 + 式 (1)）&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;保持查询 token 与视觉 token 等势（等数量）&lt;/strong&gt;，并且 &lt;strong&gt;只把查询 token（编码器输出后半段）喂给解码器&lt;/strong&gt;，形成“编码器先重排、解码器再自回归推理”的级联因果结构。（引言贡献点 (3)(4)）&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;在不牺牲 token 压缩比/解码效率的前提下提高性能&lt;/strong&gt;：把喂给 LLM 的视觉 token 预算约束在 &lt;strong&gt;256–1120&lt;/strong&gt;（下限对齐 DeepSeek-OCR 的 1024^2 tokenization，上限对齐 Gemini-3 Pro token budget）。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;实证：OmniDocBench v1.5 上整体 +3.73，阅读顺序 ED 从 0.085 降到 0.057&lt;/strong&gt;，并在生产环境用 repetition rate 观测到质量提升。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;hr&gt;
+&lt;h2 id=&#34;问题定义与假设&#34;&gt;问题定义与假设&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;输入：文档图像（多分辨率、多布局；方法中明确有 1024×1024 global view + 768×768 local crops）&lt;/li&gt;
+&lt;li&gt;输出：面向“文档阅读/解析”的文本与结构化内容（论文用 OmniDocBench 的多指标来衡量文本、公式、表格、阅读顺序）&lt;/li&gt;
+&lt;li&gt;关键约束：
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;token 预算&lt;/strong&gt;：喂给解码器的（重排后）视觉 token 总数在 [256, 1120]，通过 0–6 个 local crops 控制&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;可比性假设&lt;/strong&gt;：训练数据源“基本一致”，仅做了轻量数据采样/标签合并，因此把 DeepSeek-OCR 视为有效 baseline&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;隐含假设（论文动机）：
+&lt;ul&gt;
+&lt;li&gt;固定 raster-scan + 固定位置编码会引入不合理归纳偏置；文档这种强结构视觉逻辑更需要“因果阅读流”&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;hr&gt;
+&lt;h2 id=&#34;方法细读&#34;&gt;方法细读&lt;/h2&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;&#34;&gt;&lt;code class=&#34;language-txt&#34; data-lang=&#34;txt&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;模块 -&amp;gt; 目的 -&amp;gt; 关键公式/伪代码 -&amp;gt; 复杂度/实现细节 + 逐段证据
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h3 id=&#34;总体架构encoderdeepencoder-v2-decoderdeepseek-moe&#34;&gt;总体架构：Encoder（DeepEncoder V2）+ Decoder（DeepSeek-MoE）&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;目标：在 encoder 端就完成 &lt;strong&gt;token 压缩 + token 重排（阅读顺序建模）&lt;/strong&gt;，decoder 侧保持 DeepSeek-OCR 的高效 MoE 解码。&lt;/li&gt;
+&lt;li&gt;证据：明确“主要聚焦 encoder，不升级 decoder，保留 DeepSeek-OCR 的 3B MoE（~500M active）”。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;hr&gt;
+&lt;h3 id=&#34;视觉-tokenizer图像视觉-token&#34;&gt;视觉 tokenizer（图像→视觉 token）&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;做法：沿用 DeepEncoder 的 tokenizer：&lt;strong&gt;80M 参数 SAM-base + 2 个卷积层&lt;/strong&gt;；并把最后卷积层维度从 1024 改到 &lt;strong&gt;896&lt;/strong&gt; 以对齐后续流水，采用的方法为 &lt;strong&gt;token compression 16×&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;目的：在进入“全局注意力的 LM-style encoder”前就把 token 数压到可控规模，降低计算/显存。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;hr&gt;
+&lt;h3 id=&#34;lm-作为-vision-encoder双流注意力--前缀拼接核心创新&#34;&gt;LM 作为 Vision Encoder：双流注意力 + 前缀拼接（核心创新）&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Dual-stream attention（双流注意力）&lt;/strong&gt;：同一 transformer 序列里，前半段视觉 token 用双向注意力；后半段查询 token 用因果注意力。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Causal flow queries / tokens（因果流查询 token）&lt;/strong&gt;：可学习的查询向量序列，用来“按因果顺序”聚合视觉 token，并隐式学出阅读顺序。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;关键机制：&lt;/p&gt;</description>
+    </item>
+  </channel>
+</rss>
