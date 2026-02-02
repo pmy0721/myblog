@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>smart_trans：多模态交通事故分析｜AI之路 | MekeyPan</title>
+<meta name="keywords" content="多模态, LLM, RAG, FastAPI, React, SQLite, ECharts, Leaflet, 可视化">
+<meta name="description" content="smart_trans 是一个“从交通照片到事故结构化数据，再到可视化看板”的最小闭环项目：用多模态 LLM 识别事故信息，FastAPI &#43; SQLite 落库并提供统计接口，React 仪表盘展示。
+项目地址：
+
+https://github.com/pmy0721/smart_trans
+
+目标与范围
+这个项目实现三件事：
+
+输入：一张交通现场照片（jpg/png/webp 都可）。
+推理：调用多模态模型，得到“是否事故 / 类型 / 严重度 / 描述 / 置信度”的严格 JSON。
+归档与展示：把记录存入 SQLite，前端展示列表与统计图。
+
+它不是一个“万能交通理解系统”，而是一个可跑通、可扩展、便于做产品化迭代的骨架。
+总体架构
+三段式：
+
+离线/命令行：traffic_issue_analyzer.py
+服务端：backend/（FastAPI &#43; SQLAlchemy &#43; SQLite）
+前端：frontend/（React &#43; Vite &#43; ECharts）
+
+
+图：smart_trans 总体架构（脚本 → 后端 API/DB → 前端可视化）
+其中一个很实用的设计是“单端口部署”：前端打包产物输出到 backend/static/，最终只需要启动一个后端端口即可同时提供页面与 API。
+脚本：从图片到严格 JSON
+核心入口在 traffic_issue_analyzer.py。
+
+通过 data:image/...;base64,... 把图片嵌入到请求里。
+使用固定提示词，要求模型“只输出一个 JSON 对象，且字段必须严格匹配”。
+对输出做容错：如果模型输出夹杂了说明文字，会尝试截取第一个 {...} JSON 片段解析。
+统一归一化：severity 限定为 轻微/中等/严重，confidence clamp 到 [0,1]。
+
+脚本默认走 --task accident（严格 JSON）；也保留了 --task label 的“单标签分类”模式，便于做更轻量的分桶。">
+<meta name="author" content="Me">
+<link rel="canonical" href="/posts/smart_trans%E5%A4%9A%E6%A8%A1%E6%80%81%E4%BA%A4%E9%80%9A%E4%BA%8B%E6%95%85%E5%88%86%E6%9E%90ai%E4%B9%8B%E8%B7%AF/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.45e028aa8ce0961349adf411b013ee39406be2c0bc80d4ea3fc04555f7f4611a.css" integrity="sha256-ReAoqozglhNJrfQRsBPuOUBr4sC8gNTqP8BFVff0YRo=" rel="preload stylesheet" as="style">
+<link rel="icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="mask-icon" href="/safari-pinned-tab.svg">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="en" href="/posts/smart_trans%E5%A4%9A%E6%A8%A1%E6%80%81%E4%BA%A4%E9%80%9A%E4%BA%8B%E6%95%85%E5%88%86%E6%9E%90ai%E4%B9%8B%E8%B7%AF/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+    <style>
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --theme: rgb(29, 30, 32);
+                --entry: rgb(46, 46, 51);
+                --primary: rgb(218, 218, 219);
+                --secondary: rgb(155, 156, 157);
+                --tertiary: rgb(65, 66, 68);
+                --content: rgb(196, 196, 197);
+                --code-block-bg: rgb(46, 46, 51);
+                --code-bg: rgb(55, 56, 62);
+                --border: rgb(51, 51, 51);
+            }
+
+            .list {
+                background: var(--theme);
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-track {
+                background: 0 0;
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-thumb {
+                border-color: var(--theme);
+            }
+        }
+
+    </style>
+</noscript><meta property="og:url" content="/posts/smart_trans%E5%A4%9A%E6%A8%A1%E6%80%81%E4%BA%A4%E9%80%9A%E4%BA%8B%E6%95%85%E5%88%86%E6%9E%90ai%E4%B9%8B%E8%B7%AF/">
+  <meta property="og:site_name" content="MekeyPan">
+  <meta property="og:title" content="smart_trans：多模态交通事故分析｜AI之路">
+  <meta property="og:description" content="smart_trans 是一个“从交通照片到事故结构化数据，再到可视化看板”的最小闭环项目：用多模态 LLM 识别事故信息，FastAPI &#43; SQLite 落库并提供统计接口，React 仪表盘展示。
+项目地址：
+https://github.com/pmy0721/smart_trans 目标与范围 这个项目实现三件事：
+输入：一张交通现场照片（jpg/png/webp 都可）。 推理：调用多模态模型，得到“是否事故 / 类型 / 严重度 / 描述 / 置信度”的严格 JSON。 归档与展示：把记录存入 SQLite，前端展示列表与统计图。 它不是一个“万能交通理解系统”，而是一个可跑通、可扩展、便于做产品化迭代的骨架。
+总体架构 三段式：
+离线/命令行：traffic_issue_analyzer.py 服务端：backend/（FastAPI &#43; SQLAlchemy &#43; SQLite） 前端：frontend/（React &#43; Vite &#43; ECharts） 图：smart_trans 总体架构（脚本 → 后端 API/DB → 前端可视化）
+其中一个很实用的设计是“单端口部署”：前端打包产物输出到 backend/static/，最终只需要启动一个后端端口即可同时提供页面与 API。
+脚本：从图片到严格 JSON 核心入口在 traffic_issue_analyzer.py。
+通过 data:image/...;base64,... 把图片嵌入到请求里。 使用固定提示词，要求模型“只输出一个 JSON 对象，且字段必须严格匹配”。 对输出做容错：如果模型输出夹杂了说明文字，会尝试截取第一个 {...} JSON 片段解析。 统一归一化：severity 限定为 轻微/中等/严重，confidence clamp 到 [0,1]。 脚本默认走 --task accident（严格 JSON）；也保留了 --task label 的“单标签分类”模式，便于做更轻量的分桶。">
+  <meta property="og:locale" content="en-us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="posts">
+    <meta property="article:published_time" content="2026-01-29T17:10:47+08:00">
+    <meta property="article:modified_time" content="2026-02-02T00:00:00+08:00">
+    <meta property="article:tag" content="多模态">
+    <meta property="article:tag" content="LLM">
+    <meta property="article:tag" content="RAG">
+    <meta property="article:tag" content="FastAPI">
+    <meta property="article:tag" content="React">
+    <meta property="article:tag" content="SQLite">
+    <meta property="og:image" content="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image129.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image129.png">
+<meta name="twitter:title" content="smart_trans：多模态交通事故分析｜AI之路">
+<meta name="twitter:description" content="smart_trans 是一个“从交通照片到事故结构化数据，再到可视化看板”的最小闭环项目：用多模态 LLM 识别事故信息，FastAPI &#43; SQLite 落库并提供统计接口，React 仪表盘展示。
+项目地址：
+
+https://github.com/pmy0721/smart_trans
+
+目标与范围
+这个项目实现三件事：
+
+输入：一张交通现场照片（jpg/png/webp 都可）。
+推理：调用多模态模型，得到“是否事故 / 类型 / 严重度 / 描述 / 置信度”的严格 JSON。
+归档与展示：把记录存入 SQLite，前端展示列表与统计图。
+
+它不是一个“万能交通理解系统”，而是一个可跑通、可扩展、便于做产品化迭代的骨架。
+总体架构
+三段式：
+
+离线/命令行：traffic_issue_analyzer.py
+服务端：backend/（FastAPI &#43; SQLAlchemy &#43; SQLite）
+前端：frontend/（React &#43; Vite &#43; ECharts）
+
+
+图：smart_trans 总体架构（脚本 → 后端 API/DB → 前端可视化）
+其中一个很实用的设计是“单端口部署”：前端打包产物输出到 backend/static/，最终只需要启动一个后端端口即可同时提供页面与 API。
+脚本：从图片到严格 JSON
+核心入口在 traffic_issue_analyzer.py。
+
+通过 data:image/...;base64,... 把图片嵌入到请求里。
+使用固定提示词，要求模型“只输出一个 JSON 对象，且字段必须严格匹配”。
+对输出做容错：如果模型输出夹杂了说明文字，会尝试截取第一个 {...} JSON 片段解析。
+统一归一化：severity 限定为 轻微/中等/严重，confidence clamp 到 [0,1]。
+
+脚本默认走 --task accident（严格 JSON）；也保留了 --task label 的“单标签分类”模式，便于做更轻量的分桶。">
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "/posts/"
+    }
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "smart_trans：多模态交通事故分析｜AI之路",
+      "item": "/posts/smart_trans%E5%A4%9A%E6%A8%A1%E6%80%81%E4%BA%A4%E9%80%9A%E4%BA%8B%E6%95%85%E5%88%86%E6%9E%90ai%E4%B9%8B%E8%B7%AF/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "smart_trans：多模态交通事故分析｜AI之路",
+  "name": "smart_trans：多模态交通事故分析｜AI之路",
+  "description": "smart_trans 是一个“从交通照片到事故结构化数据，再到可视化看板”的最小闭环项目：用多模态 LLM 识别事故信息，FastAPI + SQLite 落库并提供统计接口，React 仪表盘展示。\n项目地址：\nhttps://github.com/pmy0721/smart_trans 目标与范围 这个项目实现三件事：\n输入：一张交通现场照片（jpg/png/webp 都可）。 推理：调用多模态模型，得到“是否事故 / 类型 / 严重度 / 描述 / 置信度”的严格 JSON。 归档与展示：把记录存入 SQLite，前端展示列表与统计图。 它不是一个“万能交通理解系统”，而是一个可跑通、可扩展、便于做产品化迭代的骨架。\n总体架构 三段式：\n离线/命令行：traffic_issue_analyzer.py 服务端：backend/（FastAPI + SQLAlchemy + SQLite） 前端：frontend/（React + Vite + ECharts） 图：smart_trans 总体架构（脚本 → 后端 API/DB → 前端可视化）\n其中一个很实用的设计是“单端口部署”：前端打包产物输出到 backend/static/，最终只需要启动一个后端端口即可同时提供页面与 API。\n脚本：从图片到严格 JSON 核心入口在 traffic_issue_analyzer.py。\n通过 data:image/...;base64,... 把图片嵌入到请求里。 使用固定提示词，要求模型“只输出一个 JSON 对象，且字段必须严格匹配”。 对输出做容错：如果模型输出夹杂了说明文字，会尝试截取第一个 {...} JSON 片段解析。 统一归一化：severity 限定为 轻微/中等/严重，confidence clamp 到 [0,1]。 脚本默认走 --task accident（严格 JSON）；也保留了 --task label 的“单标签分类”模式，便于做更轻量的分桶。\n",
+  "keywords": [
+    "多模态", "LLM", "RAG", "FastAPI", "React", "SQLite", "ECharts", "Leaflet", "可视化"
+  ],
+  "articleBody": "smart_trans 是一个“从交通照片到事故结构化数据，再到可视化看板”的最小闭环项目：用多模态 LLM 识别事故信息，FastAPI + SQLite 落库并提供统计接口，React 仪表盘展示。\n项目地址：\nhttps://github.com/pmy0721/smart_trans 目标与范围 这个项目实现三件事：\n输入：一张交通现场照片（jpg/png/webp 都可）。 推理：调用多模态模型，得到“是否事故 / 类型 / 严重度 / 描述 / 置信度”的严格 JSON。 归档与展示：把记录存入 SQLite，前端展示列表与统计图。 它不是一个“万能交通理解系统”，而是一个可跑通、可扩展、便于做产品化迭代的骨架。\n总体架构 三段式：\n离线/命令行：traffic_issue_analyzer.py 服务端：backend/（FastAPI + SQLAlchemy + SQLite） 前端：frontend/（React + Vite + ECharts） 图：smart_trans 总体架构（脚本 → 后端 API/DB → 前端可视化）\n其中一个很实用的设计是“单端口部署”：前端打包产物输出到 backend/static/，最终只需要启动一个后端端口即可同时提供页面与 API。\n脚本：从图片到严格 JSON 核心入口在 traffic_issue_analyzer.py。\n通过 data:image/...;base64,... 把图片嵌入到请求里。 使用固定提示词，要求模型“只输出一个 JSON 对象，且字段必须严格匹配”。 对输出做容错：如果模型输出夹杂了说明文字，会尝试截取第一个 {...} JSON 片段解析。 统一归一化：severity 限定为 轻微/中等/严重，confidence clamp 到 [0,1]。 脚本默认走 --task accident（严格 JSON）；也保留了 --task label 的“单标签分类”模式，便于做更轻量的分桶。\n最常用的调用方式：\npython3 -m pip install -r requirements.txt python3 traffic_issue_analyzer.py \\ -i input_image/image1.jpg \\ --upload http://localhost:8000/api/uploads \\ --post http://localhost:8000/api/accidents 脚本依赖的关键环境变量：\nSILICONFLOW_API_KEY：必填 SILICONFLOW_BASE_URL：默认 https://api.siliconflow.cn/v1 SILICONFLOW_MODEL：默认 Qwen/Qwen3-VL-32B-Instruct 脚本进阶：RAG 模式（确定性输出 + 可追溯证据链） 默认的 --task accident 依赖模型“直接给结论”，优点是简单，缺点是口径容易随模型输出波动。为了解决“稳定性 + 可解释性”这两个工程痛点，项目加入了 --task rag：\n先让模型只做“事实抽取”（不输出事故结论），多次运行后聚合为一份 observations。\n再用本地规则 rag/rules.json 根据 observations 以确定性方式产出 accident_type/severity（优先级命中）。\n最后从 rag/knowledge.md 做轻量检索，连同命中规则、抽取结果一起写入 raw_model_output，便于回放与排障。\n图：RAG 流程（事实抽取 → 聚合 observations → rules.json 决策 → knowledge.md 检索 → trace 写入 raw_model_output）\n示例：\npython3 traffic_issue_analyzer.py \\ -i input_image/image1.jpg \\ --task rag \\ --extract-runs 3 \\ --upload http://localhost:8000/api/uploads \\ --post http://localhost:8000/api/accidents 成本控制：RAG 模式默认启用本地缓存（.cache/smart_trans/accident_rag/），可用 --no-cache 关闭，或用 --refresh-cache 强制重算。\nobservations：事实抽取后的“可见事实”结构 在 --task rag 下，模型不会直接输出事故结论，而是输出一份“事实抽取 JSON”，脚本会做归一化并多次运行后聚合，最终形成 observations（写入 raw_model_output 的 trace 中）。\nobservations 字段包含：\n碰撞/现场证据\ncollision_evidence：是否有明确碰撞/事故证据（受损、接触、翻车、撞护栏等） vehicles_involved：0-10，涉及车辆数量估计 collision_mode：rear_end/side/head_on/single_vehicle/unknown rollover：是否翻车/侧翻 guardrail_collision：是否撞护栏/隔离设施 damage_level：minor/moderate/severe/unknown 弱势交通参与者与危险线索\npedestrian_involved：是否涉及行人 non_motor_involved：是否涉及非机动车（自行车/电动车/摩托车等） fire_or_smoke：是否有明显火焰或浓烟 wrong_way：是否有明确逆行线索 scene_context_confidence：0-1，仅用于需要场景上下文的判断（如逆行） 通行影响\nlane_blockage：none/partial/full/unknown 可读描述（只写事实）\ndescription_facts：1-3 句中文，只描述可见事实，不输出“事故类型/严重度”等结论 位置信息（可选）\nlocation_text：地点/道路/地标文字线索或 null lat/lng：坐标或 null（优先从右上角水印 Lat:..., Lng:... 抄写） location_source：exif/watermark/model/hint/unknown 或 null location_confidence：0-1 或 null 聚合方式（多次抽取 -\u003e 一份 observations）：\nbool：多数投票 数值/车辆数：中位数 枚举：众数（并按偏好顺序打破平局） 坐标：中位数 + 合法范围校验；来源偏向 watermark \u003e exif \u003e hint \u003e model rag/rules.json：确定性口径的规则配置 rag/rules.json 的作用是把“模型输出的不稳定事实”收敛为“稳定可回归的结论”。它包含三块：\naccident_type allowed：允许输出的事故类型集合 rules：规则列表（按 priority 从高到低命中第一条），每条规则形如： id：规则标识 priority：优先级（越大越先命中） when：条件（支持等值、范围 \u003e=/\u003c=、集合 in） set：命中的输出值（例如 追尾/侧面碰撞/...） note：说明 default：默认值（通常为 其他） 典型规则（按优先级大致从高到低）：\n行人/非机动车优先归类（弱势交通参与者优先级最高） 翻车/多车连环/对向相撞/撞护栏/追尾/侧面碰撞/单车事故等 逆行需要 scene_context_confidence 达到阈值才会判定 如果只是占道但没有碰撞证据，会判为 占道 severity allowed：轻微/中等/严重 rules：同样的优先级命中机制 常见严重指标：行人、翻车、火烟、多车连环、严重变形、完全堵塞 无碰撞证据时会落到 轻微 confidence base_if_accident/base_if_no_accident：基础置信度 weights：各特征加权（如翻车/火烟/行人/对向相撞/占道程度/损伤程度等） 还有保守上限：例如“无事故证据”时置信度上限会被压低，避免过度自信 这套设计的关键收益：结论稳定（规则决定口径），同时保留证据链（observations + matched_rules + retrieved_notes），方便排障与做离线评测。\n后端：FastAPI + SQLite 的数据与接口 FastAPI + SQLite：为什么这对组合适合做最小闭环 FastAPI：基于 ASGI 的 Python Web 框架，天然适合做“API + 数据校验 + 文档”这一套工程闭环。\n类型标注 + Pydantic 模型：请求/响应结构天然可约束（本项目的 AccidentCreate/AccidentRead 就是这种模式）。 自动 OpenAPI：接口文档与调试（Swagger / ReDoc）几乎零成本，适合快速迭代和对接前端。 依赖注入（Depends）：数据库 session、鉴权、参数校验等横切逻辑更容易组织（本项目用 get_db 管理 session 生命周期）。 SQLite：单文件数据库，零运维、可复制、可随项目一起跑起来，特别适合 demo/内网工具/原型验证。\n优点：启动成本极低（一个 .db 文件）、读多写少场景很顺手。 局限：高并发写入能力有限；如果后续要上生产或多实例部署，一般会迁移到 Postgres/MySQL，并配合 Alembic 做迁移管理。 在本项目里，SQLite 由 SQLAlchemy 2.x 管理，默认库文件在 backend/data/accidents.db（可用 SMART_TRANS_DB 覆盖）。\n后端主入口：backend/app/main.py。\nCORS：默认允许 http://localhost:5173（可用 SMART_TRANS_CORS_ORIGIN 覆盖）。 启动自动建表：Base.metadata.create_all(bind=engine)。 静态托管： /uploads：上传图片目录 /assets：前端 build 产物 / + SPA fallback：让 React Router 在单端口下可用 数据模型 backend/app/models.py 里 Accident 表字段覆盖了“结果 + 证据 + 位置信息”的最小集合：\n结果：has_accident / accident_type / severity / description / confidence 证据：image_path（相对路径 uploads/）+ raw_model_output（可选） 补充：hint、source 位置：lat/lng/location_source/location_confidence/location_text 时间字段 created_at 使用“北京时间的 naive datetime”存 SQLite（配合 backend/app/utils.py 里的 now_bjt_naive() / as_bjt_aware() 做转换）。\nSchema 演进兜底：ensure_sqlite_schema Demo 阶段最常见的变化就是“加字段”。项目在 backend/app/db.py 里提供了 ensure_sqlite_schema()：如果 accidents 表已存在但缺少新列，会在启动时自动执行 ALTER TABLE ... ADD COLUMN 补齐（例如 lat/lng/location_text/location_confidence/raw_model_output 等）。\n这让你可以先把闭环跑通，再逐步扩充字段；但如果要走长期演进，还是建议引入 Alembic 管理迁移。\n上传接口：带 EXIF GPS 提取 POST /api/uploads（backend/app/routes/uploads.py）：\n保存原始图片到 backend/uploads/。 返回 image_path 和可直接访问的 image_url。 尝试从 EXIF GPS 解析经纬度（backend/app/utils.py:try_extract_exif_gps），如果拿到就一并返回。 这个设计让“图片证据”和“结构化记录”能解耦：前端展示时只需要 image_url。\n事故记录接口 backend/app/routes/accidents.py：\nPOST /api/accidents：入库，会对严重度做一次兜底归一化。 GET /api/accidents：支持分页和过滤（是否事故、严重度、类型、时间范围）。 GET /api/accidents/{id}：详情。 统计接口 backend/app/routes/stats.py：\nGET /api/stats/summary：总数、近 7 天、严重数、严重占比 GET /api/stats/by_type：按类型计数 GET /api/stats/by_severity：按严重度计数（轻微/中等/严重顺序固定） GET /api/stats/timeline?days=30：按天的趋势点 GET /api/stats/geo?precision=2\u0026limit=300：按经纬度分桶聚合（用于地图散点/热力） 位置信息：从图片到可视化 位置字段在这个项目里是“可选但很关键”的一环：一旦有了可用的 lat/lng，统计和展示的表达力会立刻上一个台阶。\n位置来源优先级（实践里的四条路） 从本次代码实现来看，位置大致有四种来源：\nEXIF（优先且可靠）：POST /api/uploads 会尝试从图片 EXIF GPS 解析经纬度（如果图片本身带定位）。 水印（可控且可造数据）：脚本提示词明确要求“如果右上角有 Lat:..., Lng:... 字样水印，则优先抄写”，并标记 location_source=watermark。 模型推断（弱证据）：若图片出现明确路牌/地标，模型可在 location_text 给出文本线索，坐标可信度通常不高。 hint（人为补充）：脚本支持 --hint 作为辅助，但建议只当提示，不要当真值。 落库字段对应为：location_text / lat / lng / location_source / location_confidence。\n工具：tools/stamp_coords.py 给图片“打坐标水印” 为了快速做 demo 数据集（尤其是地图统计），项目提供了 tools/stamp_coords.py：它会在图片右上角盖一个半透明水印，例如 Lat: 23.162414, Lng: 113.241440。\n几个常用用法：\n# 单张图片：默认原地覆盖（可加 --backup 先备份） python3 tools/stamp_coords.py input_image/image4.jpg --backup # 批量处理目录：生成 *_stamped 副本，不覆盖原图 python3 tools/stamp_coords.py --dir input_image --write-map 配合 --write-map 会生成一份坐标映射 JSON（例如 coords_stamped.json），方便做回放、对账、或后续评测。\n统计补充：/api/stats/geo 的“分桶聚合” /api/stats/geo 的实现方式非常“工程化”：不是返回每一条事故记录，而是先把经纬度按精度 round 成 bucket，再聚合计数。\nprecision：保留小数位数（越大越细，bucket 越多） limit：最多返回多少个 bucket curl \"http://localhost:8000/api/stats/geo?precision=2\u0026limit=300\" 前端 Dashboard 地图展示的圆点，本质就是这些 bucket（点越大代表该区域聚合计数越高），非常适合“看分布”，而不是“看单条”。\n前端：仪表盘 + 列表 + 详情 前端位于 frontend/：React Router 做路由，ECharts 做图。\n另外，地图使用 Leaflet（React-Leaflet）。在 Vite 环境下，Leaflet 默认 marker 的图片路径经常会丢失，因此项目加了 frontend/src/map/leafletFix.ts，把 marker-icon.png 等资源显式注入到默认 icon 配置里，避免“地图有点但图标不显示”的常见坑。\nDashboard：KPI 卡片 + Top10 类型条形图 + 严重度环形图 + 30 天游走趋势。 Accidents：分页列表 + 筛选（严重度/是否事故/每页数量），点击行进入详情。 Detail：展示图片 + 记录字段，支持一键 Copy JSON。 开发时通过 frontend/vite.config.ts 代理：\n/api -\u003e http://localhost:8000 /uploads -\u003e http://localhost:8000 构建时输出到 ../backend/static，配合后端的静态挂载实现单端口。\n本地运行 后端：\npython3 -m pip install -r requirements.txt PYTHONPATH=backend uvicorn app.main:app --reload --port 8000 前端（开发模式）：\ncd frontend npm install npm run dev 单端口构建（生产形态）：\ncd frontend npm run build PYTHONPATH=backend uvicorn app.main:app --port 8000 上线前的几个现实问题 这个项目目前非常适合本地/内网 demo，但如果要对公网开放，建议优先补齐：\n鉴权与限流：上传与写入接口需要保护（API key / OAuth / 反代鉴权 + rate limit）。 上传安全：/api/uploads 需要做文件类型白名单、大小限制、内容嗅探防护；同时注意 /uploads 是静态可访问的公开目录。 数据演进：现在是 create_all 自动建表，后续字段变化建议引入 Alembic 做迁移。 可观测性：记录 raw_model_output（或截断/哈希）能显著提升排障与评测能力。 可以继续扩展的方向 结构化增强：更多字段（车道占用、是否拥堵、涉及车辆数、是否有行人、建议处置等）。 地理可视化：如果 EXIF GPS 命中率高，可在前端加地图热力图（并明确隐私策略）。 质量评测：引入一批标注样例，做离线评测与 prompt/模型版本对比。 任务队列：把“推理”变成异步任务（Celery/RQ/Redis），提升吞吐并避免阻塞请求。 版本可追溯：把 model/base_url/prompt_version 等写入库（或写入 raw_model_output 的外层 envelope），方便回归与对比。 ",
+  "wordCount" : "633",
+  "inLanguage": "en",
+  "image":"https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image129.png","datePublished": "2026-01-29T17:10:47+08:00",
+  "dateModified": "2026-02-02T00:00:00+08:00",
+  "author":{
+    "@type": "Person",
+    "name": "Me"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "/posts/smart_trans%E5%A4%9A%E6%A8%A1%E6%80%81%E4%BA%A4%E9%80%9A%E4%BA%8B%E6%95%85%E5%88%86%E6%9E%90ai%E4%B9%8B%E8%B7%AF/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MekeyPan",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "/favicon.ico"
+    }
+  }
+}
+</script>
+</head>
+
+<body class="" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "dark") {
+        document.body.classList.add('dark');
+    } else if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('dark');
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="/" accesskey="h" title="Home (Alt + H)">
+                <img src="/icon.png" alt="" aria-label="logo"
+                    height="35">Home</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="/">Home</a>&nbsp;»&nbsp;<a href="/posts/">Posts</a></div>
+    <h1 class="post-title entry-hint-parent">
+      smart_trans：多模态交通事故分析｜AI之路
+    </h1>
+    <div class="post-meta"><span title='2026-01-29 17:10:47 +0800 CST'>January 29, 2026</span>&nbsp;·&nbsp;3 min&nbsp;·&nbsp;633 words&nbsp;·&nbsp;Me
+
+</div>
+  </header> 
+<figure class="entry-cover"><img loading="eager" src="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/image129.png" alt="">
+        
+</figure><div class="toc">
+    <details >
+        <summary accesskey="c" title="(Alt + C)">
+            <span class="details">Table of Contents</span>
+        </summary>
+
+        <div class="inner"><nav id="TableOfContents">
+  <ul>
+    <li><a href="#目标与范围">目标与范围</a></li>
+    <li><a href="#总体架构">总体架构</a></li>
+    <li><a href="#脚本从图片到严格-json">脚本：从图片到严格 JSON</a></li>
+    <li><a href="#脚本进阶rag-模式确定性输出--可追溯证据链">脚本进阶：RAG 模式（确定性输出 + 可追溯证据链）</a>
+      <ul>
+        <li><a href="#observations事实抽取后的可见事实结构">observations：事实抽取后的“可见事实”结构</a></li>
+        <li><a href="#ragrulesjson确定性口径的规则配置">rag/rules.json：确定性口径的规则配置</a></li>
+      </ul>
+    </li>
+    <li><a href="#后端fastapi--sqlite-的数据与接口">后端：FastAPI + SQLite 的数据与接口</a>
+      <ul>
+        <li><a href="#fastapi--sqlite为什么这对组合适合做最小闭环">FastAPI + SQLite：为什么这对组合适合做最小闭环</a></li>
+        <li><a href="#数据模型">数据模型</a></li>
+        <li><a href="#schema-演进兜底ensure_sqlite_schema">Schema 演进兜底：ensure_sqlite_schema</a></li>
+        <li><a href="#上传接口带-exif-gps-提取">上传接口：带 EXIF GPS 提取</a></li>
+        <li><a href="#事故记录接口">事故记录接口</a></li>
+        <li><a href="#统计接口">统计接口</a></li>
+      </ul>
+    </li>
+    <li><a href="#位置信息从图片到可视化">位置信息：从图片到可视化</a>
+      <ul>
+        <li><a href="#位置来源优先级实践里的四条路">位置来源优先级（实践里的四条路）</a></li>
+        <li><a href="#工具toolsstamp_coordspy-给图片打坐标水印">工具：tools/stamp_coords.py 给图片“打坐标水印”</a></li>
+        <li><a href="#统计补充apistatsgeo-的分桶聚合">统计补充：/api/stats/geo 的“分桶聚合”</a></li>
+      </ul>
+    </li>
+    <li><a href="#前端仪表盘--列表--详情">前端：仪表盘 + 列表 + 详情</a></li>
+    <li><a href="#本地运行">本地运行</a></li>
+    <li><a href="#上线前的几个现实问题">上线前的几个现实问题</a></li>
+    <li><a href="#可以继续扩展的方向">可以继续扩展的方向</a></li>
+  </ul>
+</nav>
+        </div>
+    </details>
+</div>
+
+  <div class="post-content"><p>smart_trans 是一个“从交通照片到事故结构化数据，再到可视化看板”的最小闭环项目：用多模态 LLM 识别事故信息，FastAPI + SQLite 落库并提供统计接口，React 仪表盘展示。</p>
+<p>项目地址：</p>
+<ul>
+<li><a href="https://github.com/pmy0721/smart_trans">https://github.com/pmy0721/smart_trans</a></li>
+</ul>
+<h2 id="目标与范围">目标与范围<a hidden class="anchor" aria-hidden="true" href="#目标与范围">#</a></h2>
+<p>这个项目实现三件事：</p>
+<ol>
+<li>输入：一张交通现场照片（jpg/png/webp 都可）。</li>
+<li>推理：调用多模态模型，得到“是否事故 / 类型 / 严重度 / 描述 / 置信度”的严格 JSON。</li>
+<li>归档与展示：把记录存入 SQLite，前端展示列表与统计图。</li>
+</ol>
+<p>它不是一个“万能交通理解系统”，而是一个可跑通、可扩展、便于做产品化迭代的骨架。</p>
+<h2 id="总体架构">总体架构<a hidden class="anchor" aria-hidden="true" href="#总体架构">#</a></h2>
+<p>三段式：</p>
+<ul>
+<li>离线/命令行：<code>traffic_issue_analyzer.py</code></li>
+<li>服务端：<code>backend/</code>（FastAPI + SQLAlchemy + SQLite）</li>
+<li>前端：<code>frontend/</code>（React + Vite + ECharts）</li>
+</ul>
+<p><img alt="smart_trans 总体架构图" loading="lazy" src="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/smart_trans%E6%80%BB%E4%BD%93%E6%9E%B6%E6%9E%84.png"></p>
+<p><em>图：smart_trans 总体架构（脚本 → 后端 API/DB → 前端可视化）</em></p>
+<p>其中一个很实用的设计是“单端口部署”：前端打包产物输出到 <code>backend/static/</code>，最终只需要启动一个后端端口即可同时提供页面与 API。</p>
+<h2 id="脚本从图片到严格-json">脚本：从图片到严格 JSON<a hidden class="anchor" aria-hidden="true" href="#脚本从图片到严格-json">#</a></h2>
+<p>核心入口在 <code>traffic_issue_analyzer.py</code>。</p>
+<ul>
+<li>通过 <code>data:image/...;base64,...</code> 把图片嵌入到请求里。</li>
+<li>使用固定提示词，要求模型“只输出一个 JSON 对象，且字段必须严格匹配”。</li>
+<li>对输出做容错：如果模型输出夹杂了说明文字，会尝试截取第一个 <code>{...}</code> JSON 片段解析。</li>
+<li>统一归一化：<code>severity</code> 限定为 <code>轻微/中等/严重</code>，<code>confidence</code> clamp 到 <code>[0,1]</code>。</li>
+</ul>
+<p>脚本默认走 <code>--task accident</code>（严格 JSON）；也保留了 <code>--task label</code> 的“单标签分类”模式，便于做更轻量的分桶。</p>
+<p>最常用的调用方式：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>python3 -m pip install -r requirements.txt
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>python3 traffic_issue_analyzer.py <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -i input_image/image1.jpg <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --upload http://localhost:8000/api/uploads <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --post http://localhost:8000/api/accidents
+</span></span></code></pre></div><p>脚本依赖的关键环境变量：</p>
+<ul>
+<li><code>SILICONFLOW_API_KEY</code>：必填</li>
+<li><code>SILICONFLOW_BASE_URL</code>：默认 <code>https://api.siliconflow.cn/v1</code></li>
+<li><code>SILICONFLOW_MODEL</code>：默认 <code>Qwen/Qwen3-VL-32B-Instruct</code></li>
+</ul>
+<h2 id="脚本进阶rag-模式确定性输出--可追溯证据链">脚本进阶：RAG 模式（确定性输出 + 可追溯证据链）<a hidden class="anchor" aria-hidden="true" href="#脚本进阶rag-模式确定性输出--可追溯证据链">#</a></h2>
+<p>默认的 <code>--task accident</code> 依赖模型“直接给结论”，优点是简单，缺点是口径容易随模型输出波动。为了解决“稳定性 + 可解释性”这两个工程痛点，项目加入了 <code>--task rag</code>：</p>
+<ol>
+<li>
+<p>先让模型只做“事实抽取”（不输出事故结论），多次运行后聚合为一份 <code>observations</code>。</p>
+</li>
+<li>
+<p>再用本地规则 <code>rag/rules.json</code> 根据 <code>observations</code> 以确定性方式产出 <code>accident_type/severity</code>（优先级命中）。</p>
+</li>
+<li>
+<p>最后从 <code>rag/knowledge.md</code> 做轻量检索，连同命中规则、抽取结果一起写入 <code>raw_model_output</code>，便于回放与排障。</p>
+</li>
+</ol>
+<p><img alt="smart_trans RAG 结构图" loading="lazy" src="https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/smart_transRAG%E7%BB%93%E6%9E%84%E5%9B%BE.jpeg"></p>
+<p><em>图：RAG 流程（事实抽取 → 聚合 observations → rules.json 决策 → knowledge.md 检索 → trace 写入 raw_model_output）</em></p>
+<p>示例：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>python3 traffic_issue_analyzer.py <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -i input_image/image1.jpg <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --task rag <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --extract-runs <span style="color:#ae81ff">3</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --upload http://localhost:8000/api/uploads <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --post http://localhost:8000/api/accidents
+</span></span></code></pre></div><p>成本控制：RAG 模式默认启用本地缓存（<code>.cache/smart_trans/accident_rag/</code>），可用 <code>--no-cache</code> 关闭，或用 <code>--refresh-cache</code> 强制重算。</p>
+<h3 id="observations事实抽取后的可见事实结构">observations：事实抽取后的“可见事实”结构<a hidden class="anchor" aria-hidden="true" href="#observations事实抽取后的可见事实结构">#</a></h3>
+<p>在 <code>--task rag</code> 下，模型不会直接输出事故结论，而是输出一份“事实抽取 JSON”，脚本会做归一化并多次运行后聚合，最终形成 <code>observations</code>（写入 <code>raw_model_output</code> 的 trace 中）。</p>
+<p><code>observations</code> 字段包含：</p>
+<ul>
+<li>
+<p>碰撞/现场证据</p>
+<ul>
+<li><code>collision_evidence</code>：是否有明确碰撞/事故证据（受损、接触、翻车、撞护栏等）</li>
+<li><code>vehicles_involved</code>：0-10，涉及车辆数量估计</li>
+<li><code>collision_mode</code>：<code>rear_end/side/head_on/single_vehicle/unknown</code></li>
+<li><code>rollover</code>：是否翻车/侧翻</li>
+<li><code>guardrail_collision</code>：是否撞护栏/隔离设施</li>
+<li><code>damage_level</code>：<code>minor/moderate/severe/unknown</code></li>
+</ul>
+</li>
+<li>
+<p>弱势交通参与者与危险线索</p>
+<ul>
+<li><code>pedestrian_involved</code>：是否涉及行人</li>
+<li><code>non_motor_involved</code>：是否涉及非机动车（自行车/电动车/摩托车等）</li>
+<li><code>fire_or_smoke</code>：是否有明显火焰或浓烟</li>
+<li><code>wrong_way</code>：是否有明确逆行线索</li>
+<li><code>scene_context_confidence</code>：0-1，仅用于需要场景上下文的判断（如逆行）</li>
+</ul>
+</li>
+<li>
+<p>通行影响</p>
+<ul>
+<li><code>lane_blockage</code>：<code>none/partial/full/unknown</code></li>
+</ul>
+</li>
+<li>
+<p>可读描述（只写事实）</p>
+<ul>
+<li><code>description_facts</code>：1-3 句中文，只描述可见事实，不输出“事故类型/严重度”等结论</li>
+</ul>
+</li>
+<li>
+<p>位置信息（可选）</p>
+<ul>
+<li><code>location_text</code>：地点/道路/地标文字线索或 null</li>
+<li><code>lat/lng</code>：坐标或 null（优先从右上角水印 <code>Lat:..., Lng:...</code> 抄写）</li>
+<li><code>location_source</code>：<code>exif/watermark/model/hint/unknown</code> 或 null</li>
+<li><code>location_confidence</code>：0-1 或 null</li>
+</ul>
+</li>
+</ul>
+<p>聚合方式（多次抽取 -&gt; 一份 observations）：</p>
+<ul>
+<li>bool：多数投票</li>
+<li>数值/车辆数：中位数</li>
+<li>枚举：众数（并按偏好顺序打破平局）</li>
+<li>坐标：中位数 + 合法范围校验；来源偏向 <code>watermark &gt; exif &gt; hint &gt; model</code></li>
+</ul>
+<h3 id="ragrulesjson确定性口径的规则配置">rag/rules.json：确定性口径的规则配置<a hidden class="anchor" aria-hidden="true" href="#ragrulesjson确定性口径的规则配置">#</a></h3>
+<p><code>rag/rules.json</code> 的作用是把“模型输出的不稳定事实”收敛为“稳定可回归的结论”。它包含三块：</p>
+<ol>
+<li><code>accident_type</code></li>
+</ol>
+<ul>
+<li><code>allowed</code>：允许输出的事故类型集合</li>
+<li><code>rules</code>：规则列表（按 <code>priority</code> 从高到低命中第一条），每条规则形如：
+<ul>
+<li><code>id</code>：规则标识</li>
+<li><code>priority</code>：优先级（越大越先命中）</li>
+<li><code>when</code>：条件（支持等值、范围 <code>&gt;=/&lt;=</code>、集合 <code>in</code>）</li>
+<li><code>set</code>：命中的输出值（例如 <code>追尾/侧面碰撞/...</code>）</li>
+<li><code>note</code>：说明</li>
+</ul>
+</li>
+<li><code>default</code>：默认值（通常为 <code>其他</code>）</li>
+</ul>
+<p>典型规则（按优先级大致从高到低）：</p>
+<ul>
+<li>行人/非机动车优先归类（弱势交通参与者优先级最高）</li>
+<li>翻车/多车连环/对向相撞/撞护栏/追尾/侧面碰撞/单车事故等</li>
+<li>逆行需要 <code>scene_context_confidence</code> 达到阈值才会判定</li>
+<li>如果只是占道但没有碰撞证据，会判为 <code>占道</code></li>
+</ul>
+<ol start="2">
+<li><code>severity</code></li>
+</ol>
+<ul>
+<li><code>allowed</code>：<code>轻微/中等/严重</code></li>
+<li><code>rules</code>：同样的优先级命中机制</li>
+<li>常见严重指标：行人、翻车、火烟、多车连环、严重变形、完全堵塞</li>
+<li>无碰撞证据时会落到 <code>轻微</code></li>
+</ul>
+<ol start="3">
+<li><code>confidence</code></li>
+</ol>
+<ul>
+<li><code>base_if_accident/base_if_no_accident</code>：基础置信度</li>
+<li><code>weights</code>：各特征加权（如翻车/火烟/行人/对向相撞/占道程度/损伤程度等）</li>
+<li>还有保守上限：例如“无事故证据”时置信度上限会被压低，避免过度自信</li>
+</ul>
+<p>这套设计的关键收益：结论稳定（规则决定口径），同时保留证据链（<code>observations + matched_rules + retrieved_notes</code>），方便排障与做离线评测。</p>
+<h2 id="后端fastapi--sqlite-的数据与接口">后端：FastAPI + SQLite 的数据与接口<a hidden class="anchor" aria-hidden="true" href="#后端fastapi--sqlite-的数据与接口">#</a></h2>
+<h3 id="fastapi--sqlite为什么这对组合适合做最小闭环">FastAPI + SQLite：为什么这对组合适合做最小闭环<a hidden class="anchor" aria-hidden="true" href="#fastapi--sqlite为什么这对组合适合做最小闭环">#</a></h3>
+<ul>
+<li>
+<p>FastAPI：基于 ASGI 的 Python Web 框架，天然适合做“API + 数据校验 + 文档”这一套工程闭环。</p>
+<ul>
+<li>类型标注 + Pydantic 模型：请求/响应结构天然可约束（本项目的 <code>AccidentCreate/AccidentRead</code> 就是这种模式）。</li>
+<li>自动 OpenAPI：接口文档与调试（Swagger / ReDoc）几乎零成本，适合快速迭代和对接前端。</li>
+<li>依赖注入（Depends）：数据库 session、鉴权、参数校验等横切逻辑更容易组织（本项目用 <code>get_db</code> 管理 session 生命周期）。</li>
+</ul>
+</li>
+<li>
+<p>SQLite：单文件数据库，零运维、可复制、可随项目一起跑起来，特别适合 demo/内网工具/原型验证。</p>
+<ul>
+<li>优点：启动成本极低（一个 <code>.db</code> 文件）、读多写少场景很顺手。</li>
+<li>局限：高并发写入能力有限；如果后续要上生产或多实例部署，一般会迁移到 Postgres/MySQL，并配合 Alembic 做迁移管理。</li>
+</ul>
+</li>
+</ul>
+<p>在本项目里，SQLite 由 SQLAlchemy 2.x 管理，默认库文件在 <code>backend/data/accidents.db</code>（可用 <code>SMART_TRANS_DB</code> 覆盖）。</p>
+<p>后端主入口：<code>backend/app/main.py</code>。</p>
+<ul>
+<li>CORS：默认允许 <code>http://localhost:5173</code>（可用 <code>SMART_TRANS_CORS_ORIGIN</code> 覆盖）。</li>
+<li>启动自动建表：<code>Base.metadata.create_all(bind=engine)</code>。</li>
+<li>静态托管：
+<ul>
+<li><code>/uploads</code>：上传图片目录</li>
+<li><code>/assets</code>：前端 build 产物</li>
+<li><code>/</code> + SPA fallback：让 React Router 在单端口下可用</li>
+</ul>
+</li>
+</ul>
+<h3 id="数据模型">数据模型<a hidden class="anchor" aria-hidden="true" href="#数据模型">#</a></h3>
+<p><code>backend/app/models.py</code> 里 <code>Accident</code> 表字段覆盖了“结果 + 证据 + 位置信息”的最小集合：</p>
+<ul>
+<li>结果：<code>has_accident / accident_type / severity / description / confidence</code></li>
+<li>证据：<code>image_path</code>（相对路径 <code>uploads/&lt;filename&gt;</code>）+ <code>raw_model_output</code>（可选）</li>
+<li>补充：<code>hint</code>、<code>source</code></li>
+<li>位置：<code>lat/lng/location_source/location_confidence/location_text</code></li>
+</ul>
+<p>时间字段 <code>created_at</code> 使用“北京时间的 naive datetime”存 SQLite（配合 <code>backend/app/utils.py</code> 里的 <code>now_bjt_naive()</code> / <code>as_bjt_aware()</code> 做转换）。</p>
+<h3 id="schema-演进兜底ensure_sqlite_schema">Schema 演进兜底：ensure_sqlite_schema<a hidden class="anchor" aria-hidden="true" href="#schema-演进兜底ensure_sqlite_schema">#</a></h3>
+<p>Demo 阶段最常见的变化就是“加字段”。项目在 <code>backend/app/db.py</code> 里提供了 <code>ensure_sqlite_schema()</code>：如果 <code>accidents</code> 表已存在但缺少新列，会在启动时自动执行 <code>ALTER TABLE ... ADD COLUMN</code> 补齐（例如 <code>lat/lng/location_text/location_confidence/raw_model_output</code> 等）。</p>
+<p>这让你可以先把闭环跑通，再逐步扩充字段；但如果要走长期演进，还是建议引入 Alembic 管理迁移。</p>
+<h3 id="上传接口带-exif-gps-提取">上传接口：带 EXIF GPS 提取<a hidden class="anchor" aria-hidden="true" href="#上传接口带-exif-gps-提取">#</a></h3>
+<p><code>POST /api/uploads</code>（<code>backend/app/routes/uploads.py</code>）：</p>
+<ul>
+<li>保存原始图片到 <code>backend/uploads/</code>。</li>
+<li>返回 <code>image_path</code> 和可直接访问的 <code>image_url</code>。</li>
+<li>尝试从 EXIF GPS 解析经纬度（<code>backend/app/utils.py:try_extract_exif_gps</code>），如果拿到就一并返回。</li>
+</ul>
+<p>这个设计让“图片证据”和“结构化记录”能解耦：前端展示时只需要 <code>image_url</code>。</p>
+<h3 id="事故记录接口">事故记录接口<a hidden class="anchor" aria-hidden="true" href="#事故记录接口">#</a></h3>
+<p><code>backend/app/routes/accidents.py</code>：</p>
+<ul>
+<li><code>POST /api/accidents</code>：入库，会对严重度做一次兜底归一化。</li>
+<li><code>GET /api/accidents</code>：支持分页和过滤（是否事故、严重度、类型、时间范围）。</li>
+<li><code>GET /api/accidents/{id}</code>：详情。</li>
+</ul>
+<h3 id="统计接口">统计接口<a hidden class="anchor" aria-hidden="true" href="#统计接口">#</a></h3>
+<p><code>backend/app/routes/stats.py</code>：</p>
+<ul>
+<li><code>GET /api/stats/summary</code>：总数、近 7 天、严重数、严重占比</li>
+<li><code>GET /api/stats/by_type</code>：按类型计数</li>
+<li><code>GET /api/stats/by_severity</code>：按严重度计数（轻微/中等/严重顺序固定）</li>
+<li><code>GET /api/stats/timeline?days=30</code>：按天的趋势点</li>
+<li><code>GET /api/stats/geo?precision=2&amp;limit=300</code>：按经纬度分桶聚合（用于地图散点/热力）</li>
+</ul>
+<h2 id="位置信息从图片到可视化">位置信息：从图片到可视化<a hidden class="anchor" aria-hidden="true" href="#位置信息从图片到可视化">#</a></h2>
+<p>位置字段在这个项目里是“可选但很关键”的一环：一旦有了可用的 <code>lat/lng</code>，统计和展示的表达力会立刻上一个台阶。</p>
+<h3 id="位置来源优先级实践里的四条路">位置来源优先级（实践里的四条路）<a hidden class="anchor" aria-hidden="true" href="#位置来源优先级实践里的四条路">#</a></h3>
+<p>从本次代码实现来看，位置大致有四种来源：</p>
+<ol>
+<li>EXIF（优先且可靠）：<code>POST /api/uploads</code> 会尝试从图片 EXIF GPS 解析经纬度（如果图片本身带定位）。</li>
+<li>水印（可控且可造数据）：脚本提示词明确要求“如果右上角有 <code>Lat:..., Lng:...</code> 字样水印，则优先抄写”，并标记 <code>location_source=watermark</code>。</li>
+<li>模型推断（弱证据）：若图片出现明确路牌/地标，模型可在 <code>location_text</code> 给出文本线索，坐标可信度通常不高。</li>
+<li>hint（人为补充）：脚本支持 <code>--hint</code> 作为辅助，但建议只当提示，不要当真值。</li>
+</ol>
+<p>落库字段对应为：<code>location_text / lat / lng / location_source / location_confidence</code>。</p>
+<h3 id="工具toolsstamp_coordspy-给图片打坐标水印">工具：tools/stamp_coords.py 给图片“打坐标水印”<a hidden class="anchor" aria-hidden="true" href="#工具toolsstamp_coordspy-给图片打坐标水印">#</a></h3>
+<p>为了快速做 demo 数据集（尤其是地图统计），项目提供了 <code>tools/stamp_coords.py</code>：它会在图片右上角盖一个半透明水印，例如 <code>Lat: 23.162414, Lng: 113.241440</code>。</p>
+<p>几个常用用法：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># 单张图片：默认原地覆盖（可加 --backup 先备份）</span>
+</span></span><span style="display:flex;"><span>python3 tools/stamp_coords.py input_image/image4.jpg --backup
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 批量处理目录：生成 *_stamped 副本，不覆盖原图</span>
+</span></span><span style="display:flex;"><span>python3 tools/stamp_coords.py --dir input_image --write-map
+</span></span></code></pre></div><p>配合 <code>--write-map</code> 会生成一份坐标映射 JSON（例如 <code>coords_stamped.json</code>），方便做回放、对账、或后续评测。</p>
+<h3 id="统计补充apistatsgeo-的分桶聚合">统计补充：/api/stats/geo 的“分桶聚合”<a hidden class="anchor" aria-hidden="true" href="#统计补充apistatsgeo-的分桶聚合">#</a></h3>
+<p><code>/api/stats/geo</code> 的实现方式非常“工程化”：不是返回每一条事故记录，而是先把经纬度按精度 round 成 bucket，再聚合计数。</p>
+<ul>
+<li><code>precision</code>：保留小数位数（越大越细，bucket 越多）</li>
+<li><code>limit</code>：最多返回多少个 bucket</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl <span style="color:#e6db74">&#34;http://localhost:8000/api/stats/geo?precision=2&amp;limit=300&#34;</span>
+</span></span></code></pre></div><p>前端 Dashboard 地图展示的圆点，本质就是这些 bucket（点越大代表该区域聚合计数越高），非常适合“看分布”，而不是“看单条”。</p>
+<h2 id="前端仪表盘--列表--详情">前端：仪表盘 + 列表 + 详情<a hidden class="anchor" aria-hidden="true" href="#前端仪表盘--列表--详情">#</a></h2>
+<p>前端位于 <code>frontend/</code>：React Router 做路由，ECharts 做图。</p>
+<p>另外，地图使用 Leaflet（React-Leaflet）。在 Vite 环境下，Leaflet 默认 marker 的图片路径经常会丢失，因此项目加了 <code>frontend/src/map/leafletFix.ts</code>，把 <code>marker-icon.png</code> 等资源显式注入到默认 icon 配置里，避免“地图有点但图标不显示”的常见坑。</p>
+<ul>
+<li>Dashboard：KPI 卡片 + Top10 类型条形图 + 严重度环形图 + 30 天游走趋势。</li>
+<li>Accidents：分页列表 + 筛选（严重度/是否事故/每页数量），点击行进入详情。</li>
+<li>Detail：展示图片 + 记录字段，支持一键 Copy JSON。</li>
+</ul>
+<p>开发时通过 <code>frontend/vite.config.ts</code> 代理：</p>
+<ul>
+<li><code>/api</code> -&gt; <code>http://localhost:8000</code></li>
+<li><code>/uploads</code> -&gt; <code>http://localhost:8000</code></li>
+</ul>
+<p>构建时输出到 <code>../backend/static</code>，配合后端的静态挂载实现单端口。</p>
+<h2 id="本地运行">本地运行<a hidden class="anchor" aria-hidden="true" href="#本地运行">#</a></h2>
+<p>后端：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>python3 -m pip install -r requirements.txt
+</span></span><span style="display:flex;"><span>PYTHONPATH<span style="color:#f92672">=</span>backend uvicorn app.main:app --reload --port <span style="color:#ae81ff">8000</span>
+</span></span></code></pre></div><p>前端（开发模式）：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cd frontend
+</span></span><span style="display:flex;"><span>npm install
+</span></span><span style="display:flex;"><span>npm run dev
+</span></span></code></pre></div><p>单端口构建（生产形态）：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cd frontend
+</span></span><span style="display:flex;"><span>npm run build
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>PYTHONPATH<span style="color:#f92672">=</span>backend uvicorn app.main:app --port <span style="color:#ae81ff">8000</span>
+</span></span></code></pre></div><h2 id="上线前的几个现实问题">上线前的几个现实问题<a hidden class="anchor" aria-hidden="true" href="#上线前的几个现实问题">#</a></h2>
+<p>这个项目目前非常适合本地/内网 demo，但如果要对公网开放，建议优先补齐：</p>
+<ol>
+<li>鉴权与限流：上传与写入接口需要保护（API key / OAuth / 反代鉴权 + rate limit）。</li>
+<li>上传安全：<code>/api/uploads</code> 需要做文件类型白名单、大小限制、内容嗅探防护；同时注意 <code>/uploads</code> 是静态可访问的公开目录。</li>
+<li>数据演进：现在是 <code>create_all</code> 自动建表，后续字段变化建议引入 Alembic 做迁移。</li>
+<li>可观测性：记录 <code>raw_model_output</code>（或截断/哈希）能显著提升排障与评测能力。</li>
+</ol>
+<h2 id="可以继续扩展的方向">可以继续扩展的方向<a hidden class="anchor" aria-hidden="true" href="#可以继续扩展的方向">#</a></h2>
+<ul>
+<li>结构化增强：更多字段（车道占用、是否拥堵、涉及车辆数、是否有行人、建议处置等）。</li>
+<li>地理可视化：如果 EXIF GPS 命中率高，可在前端加地图热力图（并明确隐私策略）。</li>
+<li>质量评测：引入一批标注样例，做离线评测与 prompt/模型版本对比。</li>
+<li>任务队列：把“推理”变成异步任务（Celery/RQ/Redis），提升吞吐并避免阻塞请求。</li>
+<li>版本可追溯：把 <code>model/base_url/prompt_version</code> 等写入库（或写入 <code>raw_model_output</code> 的外层 envelope），方便回归与对比。</li>
+</ul>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+      <li><a href="/tags/%E5%A4%9A%E6%A8%A1%E6%80%81/">多模态</a></li>
+      <li><a href="/tags/llm/">LLM</a></li>
+      <li><a href="/tags/rag/">RAG</a></li>
+      <li><a href="/tags/fastapi/">FastAPI</a></li>
+      <li><a href="/tags/react/">React</a></li>
+      <li><a href="/tags/sqlite/">SQLite</a></li>
+      <li><a href="/tags/echarts/">ECharts</a></li>
+      <li><a href="/tags/leaflet/">Leaflet</a></li>
+      <li><a href="/tags/%E5%8F%AF%E8%A7%86%E5%8C%96/">可视化</a></li>
+    </ul>
+<nav class="paginav">
+  <a class="next" href="/posts/deepseek-v3.2-%E5%88%9B%E6%96%B0%E7%82%B9%E4%B8%8E%E6%8A%80%E6%9C%AF%E7%BB%86%E8%8A%82ai%E7%AC%94%E8%AE%B0/">
+    <span class="title">Next »</span>
+    <br>
+    <span>DeepSeek V3.2 创新点与技术细节｜AI笔记</span>
+  </a>
+</nav>
+
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2026 <a href="/">MekeyPan</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+</body>
+
+</html>
