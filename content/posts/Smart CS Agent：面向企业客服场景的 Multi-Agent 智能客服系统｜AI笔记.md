@@ -78,50 +78,7 @@ cover:
 
 ## 3. 系统架构总览
 
-```mermaid
-flowchart TB
-    subgraph O["编排层"]
-        API["FastAPI / WebSocket API"]
-        GRAPH["LangGraph StateGraph"]
-        SUP["Supervisor"]
-    end
-
-    subgraph A["专家 Agent 层"]
-        FAQ["FAQ Agent"]
-        ORDER["Order Agent"]
-        COMPLAINT["Complaint Agent"]
-        CHITCHAT["Chitchat Agent"]
-    end
-
-    subgraph S["共享服务层"]
-        RAG["RAG Service"]
-        TOOLS["Tools"]
-        MEMORY["Memory"]
-        GUARD["Guardrails"]
-        REPO["Repositories / SQLite"]
-        OBS["Observability / Audit"]
-    end
-
-    API --> GRAPH
-    GRAPH --> SUP
-    SUP --> FAQ
-    SUP --> ORDER
-    SUP --> COMPLAINT
-    SUP --> CHITCHAT
-
-    FAQ --> RAG
-    ORDER --> TOOLS
-    COMPLAINT --> TOOLS
-
-    GRAPH --> MEMORY
-    GRAPH --> GUARD
-    GRAPH --> REPO
-    GRAPH --> OBS
-    RAG --> REPO
-    TOOLS --> REPO
-    MEMORY --> REPO
-    OBS --> REPO
-```
+![Smart CS Agent 系统架构图](/uploads/2026/04/smart-cs-agent/architecture-overview.svg)
 
 之所以是三层，而不是“编排层 + Agent 层”两层，是因为这个项目里有一批能力天然应该被多个 Agent 共享，而不应该复制到每个 Agent 内部，比如记忆注入、审批持久化、Guardrails、审计日志、FAQ 检索服务和工作流状态持久化。把这些能力抽成共享服务层，带来的价值是：一方面让 Agent 保持职责单一，另一方面让审批、记忆、安全、追踪这些横切能力可以被统一治理。
 
@@ -220,48 +177,7 @@ flowchart TB
 
 ### 4.5 完整状态流转图
 
-```mermaid
-stateDiagram-v2
-    [*] --> memory_inject
-    memory_inject --> guardrail_in
-    guardrail_in --> supervisor
-
-    supervisor --> faq: intent=faq
-    supervisor --> order: intent=order
-    supervisor --> complaint_agent: intent=complaint / circuit_open
-    supervisor --> chitchat: intent=chitchat
-    supervisor --> clarify: needs_clarification
-    supervisor --> reject: rejected
-    supervisor --> finalize: intent=finalize
-
-    faq --> supervisor: pending_intents
-    faq --> clarify: needs_clarification
-    faq --> approval_gate: pending_actions
-    faq --> finalize: response_segments
-    faq --> reject: rejected
-
-    order --> supervisor: pending_intents / circuit_open
-    order --> clarify: needs_clarification
-    order --> approval_gate: pending_actions
-    order --> finalize: response_segments
-    order --> reject: rejected
-
-    complaint_agent --> finalize
-    chitchat --> finalize
-
-    approval_gate --> finalize: execute_and_respond
-    approval_gate --> wait_for_approval: wait_for_approval
-    approval_gate --> human_escalation: human_escalation
-
-    clarify --> guardrail_out
-    wait_for_approval --> guardrail_out
-    human_escalation --> guardrail_out
-    finalize --> guardrail_out
-
-    guardrail_out --> memory_update
-    memory_update --> [*]
-    reject --> [*]
-```
+![Smart CS Agent 状态流转图](/uploads/2026/04/smart-cs-agent/state-flow.svg)
 
 ## 5. 核心能力模块
 
