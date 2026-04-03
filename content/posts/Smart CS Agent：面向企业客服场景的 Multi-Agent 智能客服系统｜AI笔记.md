@@ -19,7 +19,7 @@ ShowWordCount: true
 ShowRssButtonInSectionTermList: true
 UseHugoToc: true
 cover:
-    image: /uploads/2026/04/Gemini_Generated_Image_o7yf60o7yf60o7yf.png
+    image: https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/04/Gemini_Generated_Image_o7yf60o7yf60o7yf.png
     alt: ''
     caption: ''
     hidden: false
@@ -78,7 +78,7 @@ cover:
 
 ## 3. 系统架构总览
 
-![Smart CS Agent 系统架构图](/uploads/2026/04/smart-cs-agent/architecture-overview.svg)
+![Smart CS Agent 系统架构图](https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/04/smart-cs-agent/architecture-overview.svg)
 
 之所以是三层，而不是“编排层 + Agent 层”两层，是因为这个项目里有一批能力天然应该被多个 Agent 共享，而不应该复制到每个 Agent 内部，比如记忆注入、审批持久化、Guardrails、审计日志、FAQ 检索服务和工作流状态持久化。把这些能力抽成共享服务层，带来的价值是：一方面让 Agent 保持职责单一，另一方面让审批、记忆、安全、追踪这些横切能力可以被统一治理。
 
@@ -177,7 +177,7 @@ cover:
 
 ### 4.5 完整状态流转图
 
-![Smart CS Agent 状态流转图](/uploads/2026/04/smart-cs-agent/state-flow.svg)
+![Smart CS Agent 状态流转图](https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/04/smart-cs-agent/state-flow.svg)
 
 ## 5. 核心能力模块
 
