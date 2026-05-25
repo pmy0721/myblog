@@ -26,7 +26,7 @@ params:
     enabled: true
     title: "<Title>" # optional default will be site title
     subtitle: "Use joy as a compass."
-    imageUrl: "https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/00805c7fd02ca6bc410e08506a48899b.PNG" # optional
+    imageUrl: "/images/contrast_style_row2_col3.png" # optional
     imageTitle: "This is MekeyPan" # optional
     imageWidth: 225 # custom size
     imageHeight: 225 # custom size
