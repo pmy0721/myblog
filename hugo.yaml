@@ -24,7 +24,7 @@ params:
 
   profileMode:
     enabled: true
-    title: "<Title>" # optional default will be site title
+    title: "MekeyPan" # optional default will be site title
     subtitle: "Use joy as a compass."
     imageUrl: "/images/contrast_style_row2_col3.png" # optional
     imageTitle: "This is MekeyPan" # optional
@@ -40,7 +40,7 @@ params:
     - name: "github"
       url: "https://github.com/pmy0721"
     - name: "wechat"
-      url: "images/wechat.png"
+      url: "images/WechatIMG423.jpg"
     - name: "weibo"
       url: "https://weibo.com/u/6120414813"
     - name: "xhs"
