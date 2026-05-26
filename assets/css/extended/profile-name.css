@@ -3,76 +3,123 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding: 4px 9px;
     font-family: "Fraunces", Georgia, serif;
     font-size: 20px;
     font-weight: 650;
     line-height: 1.1;
     letter-spacing: 0;
-    margin: 2px 0 0;
+    margin: -2px 0 -4px;
     isolation: isolate;
+    text-shadow: 0 0 0 rgba(0, 0, 0, 0);
+    animation: profile-name-text-spark 4.6s steps(1, end) infinite;
 }
 
 .profile .profile_inner h1::before,
 .profile .profile_inner h1::after {
     content: "";
     position: absolute;
-    top: 50%;
-    width: 20px;
-    height: 24px;
-    background: #050505;
-    clip-path: polygon(47% 0, 100% 0, 64% 38%, 92% 38%, 28% 100%, 44% 54%, 12% 54%);
-    opacity: 0.88;
-    transform: translateY(-50%) rotate(-10deg);
-    transform-origin: center;
-    filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.34));
-    animation: profile-name-bolt 3.4s steps(1, end) infinite;
+    inset: -12px -20px;
+    z-index: -1;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    opacity: 0.72;
+    filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.45));
     pointer-events: none;
 }
 
 .profile .profile_inner h1::before {
-    left: -30px;
+    background-image: url("data:image/svg+xml,%3Csvg width='260' height='70' viewBox='0 0 260 70' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolyline points='14,38 31,20 57,27 75,13 105,23 132,11 162,24 191,14 232,25 214,37 242,45 207,53 178,47 151,60 124,49 96,57 68,47 39,55 18,46' fill='none' stroke='%23050505' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='41,29 55,35 46,42 70,38 62,49 88,44' fill='none' stroke='%23050505' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='169,26 185,32 175,40 201,36 192,48 219,42' fill='none' stroke='%23050505' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    animation: profile-name-bolt-wrap 4.1s steps(1, end) infinite;
 }
 
 .profile .profile_inner h1::after {
-    right: -30px;
-    transform: translateY(-50%) scaleX(-1) rotate(-10deg);
-    animation-delay: 1.2s;
+    inset: -8px -16px;
+    background-image: url("data:image/svg+xml,%3Csvg width='260' height='62' viewBox='0 0 260 62' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolyline points='21,45 47,39 65,48 88,35 111,42 132,30 155,38 181,27 205,36 235,29' fill='none' stroke='%23050505' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='28,24 55,30 79,20 102,29 128,18 152,28 181,17 207,28 232,21' fill='none' stroke='%23050505' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    opacity: 0;
+    filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.62));
+    animation: profile-name-bolt-cross 4.1s steps(1, end) infinite;
+    animation-delay: 0.55s;
 }
 
 .dark .profile .profile_inner h1::before,
 .dark .profile .profile_inner h1::after {
-    background: #0b0b0b;
     filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.28));
 }
 
-@keyframes profile-name-bolt {
+@keyframes profile-name-bolt-wrap {
     0%,
-    11%,
+    8%,
+    20%,
     100% {
-        opacity: 0.82;
+        opacity: 0.7;
+        transform: translate3d(0, 0, 0);
     }
 
+    9% {
+        opacity: 0.18;
+        transform: translate3d(1px, -1px, 0);
+    }
+
+    10%,
     12% {
-        opacity: 0.22;
-        transform: translateY(-50%) rotate(-4deg) scale(0.92);
-    }
-
-    13%,
-    15% {
         opacity: 1;
+        transform: translate3d(-1px, 1px, 0);
     }
 
+    13% {
+        opacity: 0.35;
+    }
+
+    14%,
     16% {
-        opacity: 0.46;
+        opacity: 0.92;
+    }
+}
+
+@keyframes profile-name-bolt-cross {
+    0%,
+    7%,
+    100% {
+        opacity: 0;
     }
 
-    17%,
-    19% {
-        opacity: 0.96;
+    8% {
+        opacity: 0.85;
+        transform: translate3d(-1px, 0, 0);
+    }
+
+    9% {
+        opacity: 0.25;
+    }
+
+    10%,
+    11% {
+        opacity: 0.78;
+        transform: translate3d(1px, 0, 0);
+    }
+}
+
+@keyframes profile-name-text-spark {
+    0%,
+    9%,
+    13%,
+    100% {
+        text-shadow: 0 0 0 rgba(0, 0, 0, 0);
+    }
+
+    10%,
+    12% {
+        text-shadow: 0 0 5px rgba(0, 0, 0, 0.45);
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .profile .profile_inner h1 {
+        animation: none;
+    }
+
     .profile .profile_inner h1::before,
     .profile .profile_inner h1::after {
         animation: none;
