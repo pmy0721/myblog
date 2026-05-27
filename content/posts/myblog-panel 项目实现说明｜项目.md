@@ -1,5 +1,5 @@
 ---
-title: "myblog-panel 项目实现说明｜项目"
+title: "myblog-panel 博客发布后台面板｜项目"
 date: '2026-05-27T21:19:10+08:00'
 tags: ["项目", "FastAPI", "Hugo", "博客自动化", "myblog-panel"]
 author: "Me"
@@ -24,7 +24,7 @@ cover:
     caption: ''
     hidden: false
 ---
-# myblog-panel 项目实现说明
+# myblog-panel 博客发布后台面板
 
 `myblog-panel` 是一个给个人博客使用的私有发布面板。它的目标不是重新实现一套博客系统，而是把原本需要在命令行里执行的博客发布流程，包装成一个可以通过浏览器访问的轻量 Web 控制台。
 
@@ -67,29 +67,7 @@ cover:
 
 ## 整体架构
 
-```mermaid
-flowchart TD
-    A["用户打开 myblog-panel"] --> B["登录页 /login"]
-    B --> C{"密码是否正确"}
-    C -->|否| B
-    C -->|是| D["主面板 /"]
-    D --> E{"选择发布类型"}
-    E --> F["动态 /quick-publish"]
-    E --> G["摄影 /photo/publish"]
-    E --> H["音乐 /music/publish"]
-    F --> I["保存上传图片"]
-    G --> I
-    H --> J["构造 myblog-manager 命令"]
-    I --> J
-    J --> K["Git 发布前检查"]
-    K --> L{"仓库是否干净且同步"}
-    L -->|否| M["阻止发布并显示错误"]
-    L -->|是| N["执行 myblog-manager"]
-    N --> O{"命令是否成功"}
-    O -->|否| P["写日志并显示失败输出"]
-    O -->|是| Q["git push origin main"]
-    Q --> R["写日志并显示发布结果"]
-```
+![myblog-panel 发布流程图](https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/05/myblog-panel-flow.svg)
 
 ## 技术栈
 
