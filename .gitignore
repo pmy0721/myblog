@@ -1,5 +1,5 @@
 .DS_Store
 content/.trash/
 .hugo_build.lock
-logs/
 public/
+logs/

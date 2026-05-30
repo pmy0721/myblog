@@ -3,6 +3,9 @@ languageCode: en-us
 title: MekeyPan
 theme: ["PaperMod"]
 
+pagination:
+  pagerSize: 50
+
 # menu:
 #   main:
 #     - identifier: categories
