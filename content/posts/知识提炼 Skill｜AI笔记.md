@@ -1,6 +1,6 @@
 ---
 title: "知识提炼 Skill"
-date: '2026-06-08T22:30:00+08:00'
+date: '2026-06-08T22:26:00+08:00'
 tags: ["AI笔记", "Prompt", "知识管理", "Obsidian"]
 author: "Me"
 showToc: true
