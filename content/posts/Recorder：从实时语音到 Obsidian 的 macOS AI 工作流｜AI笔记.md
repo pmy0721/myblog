@@ -19,8 +19,8 @@ ShowWordCount: true
 ShowRssButtonInSectionTermList: true
 UseHugoToc: true
 cover:
-    image: https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/07/recorder-quiet-intelligence-cover.jpg
-    alt: "炭黑声波穿过杏橙光场，转化为结构化线条与节点"
+    image: https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/07/recorder-quiet-intelligence-cover-v2.png
+    alt: "暖白纸张上的六根炭黑信号柱、杏橙光晕与水平细线"
     caption: ''
     hidden: false
 ---
