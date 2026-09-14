@@ -19,7 +19,7 @@ ShowWordCount: true
 ShowRssButtonInSectionTermList: true
 UseHugoToc: true
 cover:
-    image: /uploads/2026/09/chatgpt-short-story-cover.png
+    image: https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/09/chatgpt-short-story-cover.png
     alt: ''
     caption: ''
     hidden: false
@@ -28,15 +28,15 @@ cover:
 
 本来并不抱什么期望，毕竟我能提供的线索太过于有限了（只能想到整篇文章最后部分的一个细节），但没想到只通过三轮的对话，ChatGPT就找到了这篇文章。
 
-![ChatGPT 根据记忆线索检索短篇小说的对话截图 1](/uploads/2026/09/chatgpt-search-dialog-01.png)
+![ChatGPT 根据记忆线索检索短篇小说的对话截图 1](https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/09/chatgpt-search-dialog-01.png)
 
-![ChatGPT 根据记忆线索检索短篇小说的对话截图 2](/uploads/2026/09/chatgpt-search-dialog-02.png)
+![ChatGPT 根据记忆线索检索短篇小说的对话截图 2](https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/09/chatgpt-search-dialog-02.png)
 
-![ChatGPT 根据记忆线索检索短篇小说的对话截图 3](/uploads/2026/09/chatgpt-search-dialog-03.png)
+![ChatGPT 根据记忆线索检索短篇小说的对话截图 3](https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/09/chatgpt-search-dialog-03.png)
 
 可以看到整个过程中，ChatGPT会引导我回忆细节，最终根据细节，找到了最后的答案。
 
-![ChatGPT 找到短篇小说《百叶窗》的对话截图](/uploads/2026/09/chatgpt-search-dialog-04.png)
+![ChatGPT 找到短篇小说《百叶窗》的对话截图](https://picgo-mekeypan0721.oss-cn-hangzhou.aliyuncs.com/img/2026/09/chatgpt-search-dialog-04.png)
 
 AI时代，我们真的可以做到我们认为做不到的事。
 
