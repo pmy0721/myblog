@@ -1,5 +1,6 @@
 baseURL: ""
 languageCode: en-us
+hasCJKLanguage: true
 title: MekeyPan
 theme: ["PaperMod"]
 
